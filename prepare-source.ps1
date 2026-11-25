@@ -29,12 +29,16 @@ if (Test-Path -LiteralPath $source) {
     Remove-Item -LiteralPath $source -Recurse -Force
 }
 
-git clone --depth 1 --branch "oneclient-2.12.1" "https://github.com/Polyfrost/OneLauncher.git" $source
+git clone --branch "orange-client" "https://github.com/u2803045005abc09734-byte/OrangeLauncher3.git" $source
 if ($LASTEXITCODE -ne 0) { throw "Could not clone the pinned upstream source." }
 
 $upstreamCommit = (git -C $source rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0 -or $upstreamCommit -ne "1605bf11248f8cc94eacf8ff1f86981abcab8dc8") {
-    throw "Unexpected upstream source revision: $upstreamCommit"
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($upstreamCommit)) {
+    throw "Could not verify the OrangeLauncher3 fork source revision."
+}
+git -C $source merge-base --is-ancestor "1605bf11248f8cc94eacf8ff1f86981abcab8dc8" HEAD
+if ($LASTEXITCODE -ne 0) {
+    throw "The Orange Client branch no longer descends from the pinned OneLauncher 2.12.1 baseline."
 }
 
 git -C $source apply --binary --whitespace=nowarn $patchOutput
