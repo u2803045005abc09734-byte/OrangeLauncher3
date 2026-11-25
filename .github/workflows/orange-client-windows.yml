@@ -1,0 +1,211 @@
+name: Orange Client Windows Build
+
+on:
+  push:
+    branches:
+      - orange-client
+    paths:
+      - "build/READY"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: orange-client-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Build and sign Orange Client for Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout OrangeLauncher3 fork
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: orange-client
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install Pillow
+        run: python -m pip install --disable-pip-version-check Pillow
+      - name: Assemble Orange Client source from this fork
+        shell: pwsh
+        run: ./prepare-source.ps1
+      - name: Generate Orange Client Windows icon
+        working-directory: source
+        run: python ../generate-icon.py
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: "source -> target"
+      - name: Test Windows account-data protection
+        working-directory: source
+        run: cargo test --locked -p oneclient_auth
+      - name: Build portable launcher executable
+        working-directory: source
+        env:
+          ORANGE_CLIENT_MICROSOFT_CLIENT_ID: ${{ secrets.ORANGE_CLIENT_MICROSOFT_CLIENT_ID }}
+          ORANGE_CLIENT_DISCORD_CLIENT_ID: ${{ secrets.ORANGE_CLIENT_DISCORD_CLIENT_ID }}
+          ORANGE_CLIENT_SENTRY_DSN: ${{ secrets.ORANGE_CLIENT_SENTRY_DSN }}
+          ORANGE_CLIENT_CHANGELOG_URL: ${{ secrets.ORANGE_CLIENT_CHANGELOG_URL }}
+        run: cargo build --locked --release -p oneclient_app --bin orange-client
+      - name: Check whether SignPath is configured
+        id: signing
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN) -or [string]::IsNullOrWhiteSpace($env:SIGNPATH_ORGANIZATION_ID)) {
+            "enabled=false" >> $env:GITHUB_OUTPUT
+            Write-Warning "SignPath is not configured. This run will produce UNSIGNED files."
+          } else {
+            "enabled=true" >> $env:GITHUB_OUTPUT
+            Write-Host "SignPath credentials detected. Release files will be submitted for signing."
+          }
+      - name: Upload unsigned application binary for signing
+        id: upload-unsigned-binary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: orange-client-binary-unsigned
+          path: source/target/release/orange-client.exe
+          if-no-files-found: error
+          retention-days: 3
+      - name: Sign Orange Client application binary with SignPath
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1.3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: orange-client
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: orange-client-binary
+          github-artifact-id: ${{ steps.upload-unsigned-binary.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed-bin
+      - name: Replace binary with signed version
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $signed = "signed-bin/orange-client.exe"
+          if (-not (Test-Path -LiteralPath $signed)) { throw "SignPath did not return orange-client.exe." }
+          Copy-Item -LiteralPath $signed -Destination "source/target/release/orange-client.exe" -Force
+          $signature = Get-AuthenticodeSignature "source/target/release/orange-client.exe"
+          if ($signature.Status -ne "Valid") { throw "Signed app binary has an invalid Authenticode signature: $($signature.Status)" }
+          Write-Host "Signed binary verified. Signer: $($signature.SignerCertificate.Subject)"
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+      - name: Create Windows setup installer
+        working-directory: source
+        env:
+          ORANGE_CLIENT_MICROSOFT_CLIENT_ID: ${{ secrets.ORANGE_CLIENT_MICROSOFT_CLIENT_ID }}
+          ORANGE_CLIENT_DISCORD_CLIENT_ID: ${{ secrets.ORANGE_CLIENT_DISCORD_CLIENT_ID }}
+          ORANGE_CLIENT_SENTRY_DSN: ${{ secrets.ORANGE_CLIENT_SENTRY_DSN }}
+          ORANGE_CLIENT_CHANGELOG_URL: ${{ secrets.ORANGE_CLIENT_CHANGELOG_URL }}
+        run: cargo packager --release -p oneclient_app --formats nsis
+      - name: Find generated installer
+        id: installer
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem "source/target/release/*-setup.exe" -File)
+          if ($files.Count -ne 1) { throw "Expected exactly one setup installer; found $($files.Count)." }
+          "path=$($files[0].FullName)" >> $env:GITHUB_OUTPUT
+          "name=$($files[0].Name)" >> $env:GITHUB_OUTPUT
+      - name: Upload unsigned installer for signing
+        id: upload-unsigned-installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: orange-client-installer-unsigned
+          path: ${{ steps.installer.outputs.path }}
+          if-no-files-found: error
+          retention-days: 3
+      - name: Sign Orange Client installer with SignPath
+        if: steps.signing.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1.3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: orange-client
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: orange-client-installer
+          github-artifact-id: ${{ steps.upload-unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed-installer
+      - name: Replace installer with signed version
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $signed = Join-Path "signed-installer" "${{ steps.installer.outputs.name }}"
+          if (-not (Test-Path -LiteralPath $signed)) { throw "SignPath did not return the signed setup installer." }
+          Copy-Item -LiteralPath $signed -Destination "source/target/release/${{ steps.installer.outputs.name }}" -Force
+          $signature = Get-AuthenticodeSignature "source/target/release/${{ steps.installer.outputs.name }}"
+          if ($signature.Status -ne "Valid") { throw "Signed installer has an invalid Authenticode signature: $($signature.Status)" }
+          Write-Host "Signed installer verified. Signer: $($signature.SignerCertificate.Subject)"
+      - name: Scan final release files with Microsoft Defender
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $files = @(Get-Item "source/target/release/orange-client.exe"; Get-ChildItem "source/target/release/*-setup.exe" -File)
+          if ($files.Count -lt 2) { throw "The portable app or setup installer is missing." }
+          if (-not (Get-Command Start-MpScan -ErrorAction SilentlyContinue)) { throw "Microsoft Defender scan cmdlet is unavailable." }
+          $scanStart = Get-Date
+          foreach ($file in $files) {
+            Write-Host "Scanning $($file.Name)..."
+            Start-MpScan -ScanType CustomScan -ScanPath $file.FullName
+          }
+          $detections = Get-MpThreatDetection -ErrorAction SilentlyContinue | Where-Object {
+            $_.InitialDetectionTime -ge $scanStart -and (($_.Resources -join " ") -match "orange-client")
+          }
+          if ($detections) { throw "Microsoft Defender detected a threat. Nothing will be published." }
+          Write-Host "No new Microsoft Defender detections for final release files."
+      - name: Generate SHA-256 checksums and signing status
+        shell: pwsh
+        run: |
+          $files = @(Get-Item "source/target/release/orange-client.exe"; Get-ChildItem "source/target/release/*-setup.exe" -File)
+          $lines = foreach ($file in $files) {
+            $hash = Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256
+            "$($hash.Hash)  $($file.Name)"
+          }
+          $lines | Set-Content -LiteralPath "SHA256SUMS.txt" -Encoding ascii
+          if ("${{ steps.signing.outputs.enabled }}" -eq "true") {
+            "Authenticode: signed and signature-verified" | Set-Content "SIGNING_STATUS.txt"
+          } else {
+            "Authenticode: UNSIGNED - configure SignPath before distributing" | Set-Content "SIGNING_STATUS.txt"
+          }
+      - name: Upload final portable executable
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Orange-Client-Windows-x64-Portable
+          path: source/target/release/orange-client.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload final Windows installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Orange-Client-Windows-x64-Setup
+          path: source/target/release/*-setup.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload SHA-256 checksums and signing status
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Orange-Client-Windows-x64-Verification
+          path: |
+            SHA256SUMS.txt
+            SIGNING_STATUS.txt
+          if-no-files-found: error
+          retention-days: 14
