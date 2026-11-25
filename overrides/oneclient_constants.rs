@@ -1,8 +1,13 @@
 pub const DUMMY_REPLACE_NEWLINE: &str = "\n";
 
+// Public client ID used by the upstream OneLauncher Microsoft authentication registration.
+// This is not a secret. Set ORANGE_CLIENT_MICROSOFT_CLIENT_ID at build time to use an
+// Orange Client-owned Microsoft app registration instead.
+const UPSTREAM_MICROSOFT_CLIENT_ID: &str = "9419b7ee-1448-4d1b-b52a-550d8f36ab56";
+
 pub const MICROSOFT_CLIENT_ID: &str = match option_env!("ORANGE_CLIENT_MICROSOFT_CLIENT_ID") {
-    Some(id) => id,
-    None => "",
+    Some(id) if !id.is_empty() => id,
+    _ => UPSTREAM_MICROSOFT_CLIENT_ID,
 };
 pub const MINECRAFT_SCOPES: &str = "XboxLive.SignIn XboxLive.offline_access";
 // Never embed a private CurseForge API key in a distributed desktop application.
