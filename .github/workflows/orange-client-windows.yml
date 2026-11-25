@@ -6,6 +6,8 @@ on:
       - orange-client
     paths:
       - "build/READY"
+      - "overrides/**"
+      - "prepare-source.ps1"
   workflow_dispatch:
 
 permissions:
