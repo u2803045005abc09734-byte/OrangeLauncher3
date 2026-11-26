@@ -24,11 +24,11 @@ impl Component for OrangeSocialPanel {
         let mut message = use_state(|| None::<String>);
 
         use_hook({
-            let session = session;
-            let ready = ready;
-            let friends = friends;
-            let incoming = incoming;
-            let message = message;
+            let mut session = session;
+            let mut ready = ready;
+            let mut friends = friends;
+            let mut incoming = incoming;
+            let mut message = message;
             move || {
                 spawn_global(async move {
                     match orange_api::load_saved_session().await {
@@ -109,17 +109,17 @@ impl Component for OrangeSocialPanel {
 
         if let Some(active) = signed_in {
             let token = active.access_token.clone();
-            let sign_out_session = session;
-            let sign_out_message = message;
-            let sign_out_busy = busy;
+            let mut sign_out_session = session;
+            let mut sign_out_message = message;
+            let mut sign_out_busy = busy;
             let sign_out = Button::new()
                 .variant(ButtonVariant::Ghost)
                 .size(ButtonSize::Small)
                 .on_press(move |_| {
                     let token = token.clone();
-                    let session = sign_out_session;
-                    let message = sign_out_message;
-                    let busy = sign_out_busy;
+                    let mut session = sign_out_session;
+                    let mut message = sign_out_message;
+                    let mut busy = sign_out_busy;
                     spawn_global(async move {
                         busy.set(true);
                         let _ = orange_api::logout(&token).await;
@@ -160,20 +160,20 @@ impl Component for OrangeSocialPanel {
             );
 
             let refresh_token = active.access_token.clone();
-            let refresh_friends = friends;
-            let refresh_requests = incoming;
-            let refresh_message = message;
-            let refresh_busy = busy;
+            let mut refresh_friends = friends;
+            let mut refresh_requests = incoming;
+            let mut refresh_message = message;
+            let mut refresh_busy = busy;
             content = content.child(
                 Button::new()
                     .secondary()
                     .size(ButtonSize::Small)
                     .on_press(move |_| {
                         let token = refresh_token.clone();
-                        let friends = refresh_friends;
-                        let requests = refresh_requests;
-                        let message = refresh_message;
-                        let busy = refresh_busy;
+                        let mut friends = refresh_friends;
+                        let mut requests = refresh_requests;
+                        let mut message = refresh_message;
+                        let mut busy = refresh_busy;
                         spawn_global(async move {
                             busy.set(true);
                             let (friend_result, request_result) = tokio::join!(
@@ -205,14 +205,14 @@ impl Component for OrangeSocialPanel {
                     let accept_name = request_name.clone();
                     let reject_name = request_name.clone();
                     let accept_token = active.access_token.clone();
-                    let accept_friends = friends;
-                    let accept_requests = incoming;
-                    let accept_message = message;
-                    let accept_busy = busy;
+                    let mut accept_friends = friends;
+                    let mut accept_requests = incoming;
+                    let mut accept_message = message;
+                    let mut accept_busy = busy;
                     let reject_token = active.access_token.clone();
-                    let reject_requests = incoming;
-                    let reject_message = message;
-                    let reject_busy = busy;
+                    let mut reject_requests = incoming;
+                    let mut reject_message = message;
+                    let mut reject_busy = busy;
                     request_list = request_list.child(
                         rect()
                             .horizontal()
@@ -235,10 +235,10 @@ impl Component for OrangeSocialPanel {
                                     .size(ButtonSize::Small)
                                     .on_press(move |_| {
                                         let token = accept_token.clone();
-                                        let friends = accept_friends;
-                                        let requests = accept_requests;
-                                        let message = accept_message;
-                                        let busy = accept_busy;
+                                        let mut friends = accept_friends;
+                                        let mut requests = accept_requests;
+                                        let mut message = accept_message;
+                                        let mut busy = accept_busy;
                                         let name = accept_name.clone();
                                         spawn_global(async move {
                                             busy.set(true);
@@ -265,9 +265,9 @@ impl Component for OrangeSocialPanel {
                                     .size(ButtonSize::Small)
                                     .on_press(move |_| {
                                         let token = reject_token.clone();
-                                        let requests = reject_requests;
-                                        let message = reject_message;
-                                        let busy = reject_busy;
+                                        let mut requests = reject_requests;
+                                        let mut message = reject_message;
+                                        let mut busy = reject_busy;
                                         let name = reject_name.clone();
                                         spawn_global(async move {
                                             busy.set(true);
@@ -299,9 +299,9 @@ impl Component for OrangeSocialPanel {
                     let friend_id = friend.id;
                     let friend_name = friend.username.clone();
                     let remove_token = active.access_token.clone();
-                    let remove_friends = friends;
-                    let remove_message = message;
-                    let remove_busy = busy;
+                    let mut remove_friends = friends;
+                    let mut remove_message = message;
+                    let mut remove_busy = busy;
                     friend_list = friend_list.child(
                         rect()
                             .horizontal()
@@ -324,9 +324,9 @@ impl Component for OrangeSocialPanel {
                                     .size(ButtonSize::Small)
                                     .on_press(move |_| {
                                         let token = remove_token.clone();
-                                        let friends = remove_friends;
-                                        let message = remove_message;
-                                        let busy = remove_busy;
+                                        let mut friends = remove_friends;
+                                        let mut message = remove_message;
+                                        let mut busy = remove_busy;
                                         let name = friend_name.clone();
                                         spawn_global(async move {
                                             busy.set(true);
@@ -357,10 +357,10 @@ impl Component for OrangeSocialPanel {
             );
 
             let search_token = active.access_token.clone();
-            let search_value = search;
-            let search_results_state = search_results;
-            let search_message = message;
-            let search_busy = busy;
+            let mut search_value = search;
+            let mut search_results_state = search_results;
+            let mut search_message = message;
+            let mut search_busy = busy;
             content = content.child(
                 Button::new()
                     .secondary()
@@ -368,9 +368,9 @@ impl Component for OrangeSocialPanel {
                     .on_press(move |_| {
                         let token = search_token.clone();
                         let query = search_value.read().trim().to_string();
-                        let results = search_results_state;
-                        let message = search_message;
-                        let busy = search_busy;
+                        let mut results = search_results_state;
+                        let mut message = search_message;
+                        let mut busy = search_busy;
                         spawn_global(async move {
                             if query.len() < 2 {
                                 message.set(Some("Enter at least 2 characters to search.".to_string()));
@@ -395,9 +395,9 @@ impl Component for OrangeSocialPanel {
                 for result in result_rows {
                     let result_name = result.username.clone();
                     let add_token = active.access_token.clone();
-                    let add_results = search_results;
-                    let add_message = message;
-                    let add_busy = busy;
+                    let mut add_results = search_results;
+                    let mut add_message = message;
+                    let mut add_busy = busy;
                     results = results.child(
                         rect()
                             .horizontal()
@@ -421,9 +421,9 @@ impl Component for OrangeSocialPanel {
                                     .on_press(move |_| {
                                         let token = add_token.clone();
                                         let username = result_name.clone();
-                                        let results = add_results;
-                                        let message = add_message;
-                                        let busy = add_busy;
+                                        let mut results = add_results;
+                                        let mut message = add_message;
+                                        let mut busy = add_busy;
                                         spawn_global(async move {
                                             busy.set(true);
                                             match orange_api::send_friend_request(&token, &username).await {
@@ -481,15 +481,15 @@ impl Component for OrangeSocialPanel {
                         .placeholder("Password (10–128 characters)"),
                 );
 
-            let auth_username = username;
-            let auth_password = password;
-            let auth_registering = registering;
-            let auth_session = session;
-            let auth_ready = ready;
-            let auth_friends = friends;
-            let auth_incoming = incoming;
-            let auth_message = message;
-            let auth_busy = busy;
+            let mut auth_username = username;
+            let mut auth_password = password;
+            let mut auth_registering = registering;
+            let mut auth_session = session;
+            let mut auth_ready = ready;
+            let mut auth_friends = friends;
+            let mut auth_incoming = incoming;
+            let mut auth_message = message;
+            let mut auth_busy = busy;
             let button_label = if *registering.read() { "Create Orange account" } else { "Sign in to Orange" };
             content = content.child(
                 Button::new()
@@ -501,12 +501,12 @@ impl Component for OrangeSocialPanel {
                         let name = auth_username.read().trim().to_string();
                         let pass = auth_password.read().clone();
                         let is_register = *auth_registering.read();
-                        let session = auth_session;
-                        let ready = auth_ready;
-                        let friends = auth_friends;
-                        let incoming = auth_incoming;
-                        let message = auth_message;
-                        let busy = auth_busy;
+                        let mut session = auth_session;
+                        let mut ready = auth_ready;
+                        let mut friends = auth_friends;
+                        let mut incoming = auth_incoming;
+                        let mut message = auth_message;
+                        let mut busy = auth_busy;
                         spawn_global(async move {
                             if name.len() < 3 || name.len() > 16 {
                                 message.set(Some("Username must be 3–16 characters.".to_string()));
