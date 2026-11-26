@@ -72,6 +72,18 @@ $securityOverrides = @(
     @{
         Source = "oneclient_constants.rs"
         Destination = "packages/oneclient_common/src/constants.rs"
+    },
+    @{
+        Source = "orange_api.rs"
+        Destination = "packages/oneclient_app/src/orange_api.rs"
+    },
+    @{
+        Source = "orange_social.rs"
+        Destination = "packages/oneclient_app/src/view/chat/orange_social.rs"
+    },
+    @{
+        Source = "orange_social_panel.rs"
+        Destination = "packages/oneclient_app/src/view/chat/panel.rs"
     }
 )
 
