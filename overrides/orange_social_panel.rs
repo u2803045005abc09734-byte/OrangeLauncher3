@@ -8,6 +8,21 @@ pub(super) enum PanelMode {
     Window,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum PanelView {
+    List,
+    Chat,
+    Blocked,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum PanelTab {
+    Chats,
+    Friends,
+    Groups,
+    Special,
+}
+
 #[derive(PartialEq)]
 pub(super) struct SocialPanel {
     pub mode: PanelMode,
