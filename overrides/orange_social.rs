@@ -587,7 +587,7 @@ fn section_heading(title: &'static str) -> Element {
     label()
         .text(title)
         .font_size(text_size(13.))
-        .font_weight(FontWeight::SEMIBOLD)
+        .font_weight(FontWeight::SEMI_BOLD)
         .color(colors::fg_primary())
         .into_element()
 }
