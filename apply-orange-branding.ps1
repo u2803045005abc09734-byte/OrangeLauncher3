@@ -179,14 +179,14 @@ $logoSvg = @'
 '@
 [System.IO.File]::WriteAllText($logo, $logoSvg, $utf8)
 
-# Original Orange pixel-mark: replace the old Polyfrost/OneClient logo wherever
+# Orange Client logo mark (white Orange slice, user-supplied): replace the old Polyfrost/OneClient logo wherever
 # the launcher UI or secondary-window icon loads it.
-$orangeMark = @'
-<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path fill="#FF7A18" fill-rule="evenodd" d="M24 7H56V15H64V24H72V56H64V64H56V72H24V64H16V56H8V24H16V16H24V7ZM32 23H48V31H56V49H48V57H32V49H24V31H32V23Z"/>
-  <path d="M33 31H47V35H51V45H47V49H33V45H29V35H33V31Z" fill="#FFB36B"/>
-</svg>
-'@
+$orangeMarkPath = Join-Path $PSScriptRoot "branding/orange-logo-mark.svg"
+if (-not (Test-Path -LiteralPath $orangeMarkPath -PathType Leaf)) {
+    throw "Missing vector Orange Client logo mark: $orangeMarkPath"
+}
+# Single-color vector trace of the user's white Orange logo (fill=currentColor), so the launcher can tint it per theme.
+$orangeMark = [System.IO.File]::ReadAllText($orangeMarkPath)
 $logoAssets = @(
     "packages/oneclient_app/assets/icons/icon-logo.svg",
     "packages/oneclient_app/assets/icons/pixel/icon-logo.svg",
