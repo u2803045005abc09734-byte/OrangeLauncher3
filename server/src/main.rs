@@ -30,6 +30,7 @@ const DUMMY_PASSWORD_HASH: &str =
 struct AppState {
     pool: PgPool,
     session_ttl_days: i64,
+    minecraft_http: reqwest::Client,
 }
 
 #[derive(Clone)]
@@ -48,6 +49,14 @@ impl ApiError {
 
     fn unauthorized() -> Self {
         Self(StatusCode::UNAUTHORIZED, "invalid username or password")
+    }
+
+    fn minecraft_unauthorized() -> Self {
+        Self(StatusCode::UNAUTHORIZED, "Minecraft session is invalid or expired; sign in again")
+    }
+
+    fn bad_gateway() -> Self {
+        Self(StatusCode::BAD_GATEWAY, "could not verify the Minecraft profile; try again")
     }
 
     fn not_found(message: &'static str) -> Self {
@@ -98,6 +107,12 @@ struct FriendRequestInput {
 #[derive(Deserialize)]
 struct UserSearch {
     q: String,
+}
+
+#[derive(Deserialize)]
+struct MinecraftProfile {
+    id: String,
+    name: String,
 }
 
 #[derive(Serialize)]
@@ -158,9 +173,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     sqlx::migrate!("./migrations").run(&pool).await?;
 
+    let minecraft_http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("OrangeClient/1.0")
+        .build()?;
+
     let state = AppState {
         pool,
         session_ttl_days,
+        minecraft_http,
     };
 
     let protected_routes = Router::new()
@@ -202,6 +223,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/health", get(health))
         .route("/v1/auth/register", post(register))
         .route("/v1/auth/login", post(login))
+        .route("/v1/auth/minecraft", post(minecraft_login))
         .merge(protected_routes)
         .with_state(state)
         .layer(TraceLayer::new_for_http())
@@ -276,7 +298,7 @@ async fn login(
     Json(input): Json<Credentials>,
 ) -> ApiResult<Json<AuthResponse>> {
     let normalized = input.username.trim().to_ascii_lowercase();
-    let user = sqlx::query_as::<_, (Uuid, String, String, DateTime<Utc>)>(
+    let user = sqlx::query_as::<_, (Uuid, String, Option<String>, DateTime<Utc>)>(
         "SELECT id, username, password_hash, created_at
          FROM users
          WHERE username_normalized = $1",
@@ -286,7 +308,13 @@ async fn login(
     .await?;
 
     let (user_id, username, password_hash, created_at, exists) = match user {
-        Some((id, name, hash, created)) => (id, name, hash, created, true),
+        Some((id, name, hash, created)) => (
+            id,
+            name,
+            hash.unwrap_or_else(|| DUMMY_PASSWORD_HASH.to_owned()),
+            created,
+            true,
+        ),
         None => (
             Uuid::nil(),
             String::new(),
@@ -309,6 +337,92 @@ async fn login(
         user: PublicUser {
             id: user_id,
             username,
+            created_at,
+        },
+    }))
+}
+
+/// Exchanges a live Minecraft Services access token for an Orange session.
+/// The token is only used for this profile verification request and is never stored.
+async fn minecraft_login(
+    State(state): State<AppState>,
+    request: Request,
+) -> ApiResult<Json<AuthResponse>> {
+    let minecraft_token = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .filter(|value| !value.is_empty() && value.len() <= 8192)
+        .ok_or(ApiError::minecraft_unauthorized())?;
+
+    let response = state
+        .minecraft_http
+        .get("https://api.minecraftservices.com/minecraft/profile")
+        .bearer_auth(minecraft_token)
+        .send()
+        .await
+        .map_err(|_| ApiError::bad_gateway())?;
+
+    if response.status() == StatusCode::UNAUTHORIZED
+        || response.status() == StatusCode::FORBIDDEN
+    {
+        return Err(ApiError::minecraft_unauthorized());
+    }
+    if !response.status().is_success() {
+        return Err(ApiError::bad_gateway());
+    }
+
+    let profile = response
+        .json::<MinecraftProfile>()
+        .await
+        .map_err(|_| ApiError::bad_gateway())?;
+    if !valid_username(&profile.name) {
+        return Err(ApiError::minecraft_unauthorized());
+    }
+    let minecraft_uuid = Uuid::parse_str(&profile.id)
+        .map_err(|_| ApiError::minecraft_unauthorized())?;
+    let username_normalized = profile.name.to_ascii_lowercase();
+
+    // A name collision with a legacy password-based Orange account must not
+    // silently transfer that account's friends to a different Minecraft UUID.
+    let name_owner = sqlx::query_as::<_, (Uuid, Option<Uuid>)>(
+        "SELECT id, minecraft_uuid FROM users WHERE username_normalized = $1",
+    )
+    .bind(&username_normalized)
+    .fetch_optional(&state.pool)
+    .await?;
+    if let Some((_, linked_uuid)) = name_owner
+        && linked_uuid != Some(minecraft_uuid)
+    {
+        return Err(ApiError::conflict(
+            "this Minecraft name is already attached to another Orange account",
+        ));
+    }
+
+    let (user_id, created_at) = sqlx::query_as::<_, (Uuid, DateTime<Utc>)>(
+        "INSERT INTO users (id, username, username_normalized, password_hash, minecraft_uuid)
+         VALUES ($1, $2, $3, NULL, $4)
+         ON CONFLICT (minecraft_uuid) DO UPDATE
+            SET username = EXCLUDED.username,
+                username_normalized = EXCLUDED.username_normalized
+         RETURNING id, created_at",
+    )
+    .bind(Uuid::new_v4())
+    .bind(&profile.name)
+    .bind(&username_normalized)
+    .bind(minecraft_uuid)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let (access_token, expires_at) = create_session(&state, user_id).await?;
+    Ok(Json(AuthResponse {
+        access_token,
+        token_type: "Bearer",
+        expires_at,
+        user: PublicUser {
+            id: user_id,
+            username: profile.name,
             created_at,
         },
     }))
