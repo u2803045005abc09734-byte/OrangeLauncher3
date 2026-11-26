@@ -22,6 +22,8 @@ pub struct OrangeSession {
     pub access_token: String,
     pub expires_at: String,
     pub user: OrangeUser,
+    #[serde(default)]
+    pub minecraft_account_id: Option<Uuid>,
 }
 
 #[derive(Clone, PartialEq, Deserialize, Serialize)]
@@ -122,6 +124,7 @@ pub async fn register(username: &str, password: &str) -> Result<OrangeSession, S
         access_token: auth.access_token,
         expires_at: auth.expires_at,
         user: auth.user,
+        minecraft_account_id: None,
     })
 }
 
@@ -137,12 +140,16 @@ pub async fn login(username: &str, password: &str) -> Result<OrangeSession, Stri
         access_token: auth.access_token,
         expires_at: auth.expires_at,
         user: auth.user,
+        minecraft_account_id: None,
     })
 }
 
 /// Creates or resumes the account bound to the verified Minecraft profile.
 /// The Minecraft access token is sent only for this HTTPS verification call.
-pub async fn minecraft_login(minecraft_access_token: &str) -> Result<OrangeSession, String> {
+pub async fn minecraft_login(
+    minecraft_access_token: &str,
+    minecraft_account_id: Uuid,
+) -> Result<OrangeSession, String> {
     let response = HTTP
         .post(api_url("/v1/auth/minecraft"))
         .bearer_auth(minecraft_access_token)
@@ -154,6 +161,7 @@ pub async fn minecraft_login(minecraft_access_token: &str) -> Result<OrangeSessi
         access_token: auth.access_token,
         expires_at: auth.expires_at,
         user: auth.user,
+        minecraft_account_id: Some(minecraft_account_id),
     })
 }
 
