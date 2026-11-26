@@ -102,8 +102,19 @@ pub fn legacy_dir() -> Option<PathBuf> {
 '@ @'
 pub fn legacy_dir() -> Option<PathBuf> {
     // Migrate existing OneClient settings, account data and game library into Orange Client.
-    ProjectDirs::from(QUALIFIER, "Polyfrost", "OneClient")
-        .map(|dirs| dirs.data_local_dir().to_path_buf())
+    {
+        let roaming = BaseDirs::new()?
+            .data_dir()
+            .join("Polyfrost")
+            .join("OneClient");
+        if roaming.join(SETTINGS_FILE).is_file() {
+            return Some(roaming);
+        }
+
+        // Older pre-roaming installs may still have the settings under Local AppData.
+        ProjectDirs::from(QUALIFIER, "Polyfrost", "OneClient")
+            .map(|dirs| dirs.data_local_dir().to_path_buf())
+    }
 }
 '@
 Replace-SourceText "packages/oneclient_common/src/paths.rs" @'
