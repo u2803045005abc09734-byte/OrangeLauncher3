@@ -140,6 +140,23 @@ pub async fn login(username: &str, password: &str) -> Result<OrangeSession, Stri
     })
 }
 
+/// Creates or resumes the account bound to the verified Minecraft profile.
+/// The Minecraft access token is sent only for this HTTPS verification call.
+pub async fn minecraft_login(minecraft_access_token: &str) -> Result<OrangeSession, String> {
+    let response = HTTP
+        .post(api_url("/v1/auth/minecraft"))
+        .bearer_auth(minecraft_access_token)
+        .send()
+        .await
+        .map_err(|_| "Could not reach the Orange server. It may be waking up; try again shortly.".to_string())?;
+    let auth: AuthResponse = decode_response(response).await?;
+    Ok(OrangeSession {
+        access_token: auth.access_token,
+        expires_at: auth.expires_at,
+        user: auth.user,
+    })
+}
+
 pub async fn me(token: &str) -> Result<OrangeUser, String> {
     let response = HTTP
         .get(api_url("/v1/me"))
