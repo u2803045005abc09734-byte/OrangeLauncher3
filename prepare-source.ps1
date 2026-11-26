@@ -41,6 +41,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "The Orange Client branch no longer descends from the pinned OneLauncher 2.12.1 baseline."
 }
 
+# Restore the pinned upstream README inside the temporary source tree. The fork's
+# public README is Orange-branded, while the binary patch was generated against upstream.
+git -C $source checkout "1605bf11248f8cc94eacf8ff1f86981abcab8dc8" -- README.md
+if ($LASTEXITCODE -ne 0) { throw "Could not restore the pinned upstream README before applying the source patch." }
+
 git -C $source apply --binary --whitespace=nowarn $patchOutput
 if ($LASTEXITCODE -ne 0) { throw "Orange Client patch did not apply cleanly." }
 
