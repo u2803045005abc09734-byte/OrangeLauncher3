@@ -124,13 +124,12 @@ documentation = "https://github.com/u2803045005abc09734-byte/OrangeLauncher3#rea
     [System.IO.File]::WriteAllText($cargoManifest, $cargoText, [System.Text.UTF8Encoding]::new($false))
 }
 
-$iconFile = Join-Path $brandingDir "orange-icon.png.b64"
-if (-not (Test-Path -LiteralPath $iconFile)) {
-    throw "Missing Orange Client icon asset."
+$iconFile = Join-Path $brandingDir "orange-app-icon.png"
+if (-not (Test-Path -LiteralPath $iconFile -PathType Leaf)) {
+    throw "Missing full-color Orange Client app icon: $iconFile"
 }
-$iconBytes = [Convert]::FromBase64String((Get-Content -LiteralPath $iconFile -Raw).Trim())
 $iconPath = Join-Path $source "packages/oneclient_app/icons/icon.png"
-[System.IO.File]::WriteAllBytes($iconPath, $iconBytes)
+Copy-Item -LiteralPath $iconFile -Destination $iconPath -Force
 
 $gitDir = Join-Path $source ".git"
 if (Test-Path -LiteralPath $gitDir) {
