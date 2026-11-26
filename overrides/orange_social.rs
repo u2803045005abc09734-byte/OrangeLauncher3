@@ -69,8 +69,6 @@ impl Component for OrangeSocialPanel {
         let mut content = rect()
             .vertical()
             .width(Size::fill())
-            .height(Size::fill())
-            .overflow(Overflow::Scroll)
             .padding(Gaps::new_all(16.))
             .spacing(12.);
 
@@ -101,7 +99,12 @@ impl Component for OrangeSocialPanel {
                     .font_size(text_size(13.))
                     .color(colors::fg_secondary()),
             );
-            return content.into_element();
+            return ScrollView::new()
+                .width(Size::fill())
+                .height(Size::fill())
+                .show_scrollbar(true)
+                .child(content)
+                .into_element();
         }
 
         if let Some(active) = signed_in {
@@ -143,7 +146,7 @@ impl Component for OrangeSocialPanel {
                                 label()
                                     .text(active.user.username.clone())
                                     .font_size(text_size(15.))
-                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .font_weight(FontWeight::SEMI_BOLD)
                                     .color(colors::fg_primary()),
                             )
                             .child(
@@ -571,7 +574,12 @@ impl Component for OrangeSocialPanel {
             );
         }
 
-        content.into_element()
+        ScrollView::new()
+            .width(Size::fill())
+            .height(Size::fill())
+            .show_scrollbar(true)
+            .child(content)
+            .into_element()
     }
 }
 
