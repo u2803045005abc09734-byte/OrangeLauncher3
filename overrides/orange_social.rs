@@ -239,6 +239,7 @@ impl Component for OrangeSocialPanel {
                                         let requests = accept_requests;
                                         let message = accept_message;
                                         let busy = accept_busy;
+                                        let name = accept_name.clone();
                                         spawn_global(async move {
                                             busy.set(true);
                                             match orange_api::accept_request(&token, request_id).await {
@@ -249,7 +250,7 @@ impl Component for OrangeSocialPanel {
                                                     );
                                                     if let Ok(value) = friend_result { friends.set(value); }
                                                     if let Ok(value) = request_result { requests.set(value); }
-                                                    message.set(Some(format!("You and {accept_name} are now friends.")));
+                                                    message.set(Some(format!("You and {name} are now friends.")));
                                                 }
                                                 Err(error) => message.set(Some(error)),
                                             }
@@ -267,6 +268,7 @@ impl Component for OrangeSocialPanel {
                                         let requests = reject_requests;
                                         let message = reject_message;
                                         let busy = reject_busy;
+                                        let name = reject_name.clone();
                                         spawn_global(async move {
                                             busy.set(true);
                                             match orange_api::reject_request(&token, request_id).await {
@@ -274,7 +276,7 @@ impl Component for OrangeSocialPanel {
                                                     requests.set(
                                                         orange_api::incoming_requests(&token).await.unwrap_or_default()
                                                     );
-                                                    message.set(Some(format!("Request from {reject_name} declined.")));
+                                                    message.set(Some(format!("Request from {name} declined.")));
                                                 }
                                                 Err(error) => message.set(Some(error)),
                                             }
@@ -325,12 +327,13 @@ impl Component for OrangeSocialPanel {
                                         let friends = remove_friends;
                                         let message = remove_message;
                                         let busy = remove_busy;
+                                        let name = friend_name.clone();
                                         spawn_global(async move {
                                             busy.set(true);
                                             match orange_api::remove_friend(&token, friend_id).await {
                                                 Ok(()) => {
                                                     friends.set(orange_api::friends(&token).await.unwrap_or_default());
-                                                    message.set(Some(format!("{friend_name} removed from your friends.")));
+                                                    message.set(Some(format!("{name} removed from your friends.")));
                                                 }
                                                 Err(error) => message.set(Some(error)),
                                             }
