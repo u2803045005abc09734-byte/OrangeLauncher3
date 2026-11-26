@@ -1,0 +1,43 @@
+name: Orange Server
+
+on:
+  push:
+    branches: [orange-client]
+    paths:
+      - "server/**"
+      - ".github/workflows/orange-server.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/orange-server.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format, check and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path server/Cargo.toml --all -- --check
+
+      - name: Compile server
+        run: cargo check --manifest-path server/Cargo.toml
+
+      - name: Run tests
+        run: cargo test --manifest-path server/Cargo.toml
