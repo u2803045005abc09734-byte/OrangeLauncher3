@@ -2,7 +2,7 @@ use std::{env, net::SocketAddr};
 
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
 use axum::{
     Extension, Json, Router,
@@ -13,6 +13,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use chrono::{DateTime, Duration, Utc};
+use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, postgres::PgPoolOptions};
