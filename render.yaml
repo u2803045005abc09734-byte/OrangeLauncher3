@@ -31,3 +31,4 @@ projects:
             plan: free
             region: frankfurt
             postgresMajorVersion: "18"
+            ipAllowList: []
