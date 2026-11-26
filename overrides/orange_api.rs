@@ -171,9 +171,12 @@ pub async fn incoming_requests(token: &str) -> Result<Vec<OrangeFriendRequest>, 
 }
 
 pub async fn search_users(token: &str, query: &str) -> Result<Vec<OrangeUser>, String> {
+    let mut search_url = url::Url::parse(&api_url("/v1/users/search"))
+        .map_err(|_| "The Orange API URL is invalid.".to_string())?;
+    search_url.query_pairs_mut().append_pair("q", query);
+
     let response = HTTP
-        .get(api_url("/v1/users/search"))
-        .query(&[("q", query)])
+        .get(search_url)
         .bearer_auth(token)
         .send()
         .await
