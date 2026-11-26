@@ -57,6 +57,26 @@ Replace-SourceText "packages/oneclient_app/src/constants.rs" 'pub const WINDOW_T
 Replace-SourceText "packages/oneclient_app/src/constants.rs" 'https://github.com/Polyfrost/OneLauncher/releases/latest/download/latest.json' 'https://github.com/u2803045005abc09734-byte/OrangeLauncher3/releases/latest/download/latest.json'
 Replace-SourceText "packages/oneclient_app/src/constants.rs" 'https://github.com/Polyfrost/OneLauncher/releases/latest' 'https://github.com/u2803045005abc09734-byte/OrangeLauncher3/releases/latest'
 
+# Normalize application identity constants regardless of values introduced by the Orange source patch.
+$constantsPath = Get-SourceFile "packages/oneclient_app/src/constants.rs"
+$constantsText = [System.IO.File]::ReadAllText($constantsPath)
+$appIdPattern = 'pub const WINDOW_APP_ID:\s*&str\s*=\s*"[^"]*";'
+$titlePattern = 'pub const WINDOW_TITLE:\s*&str\s*=\s*"[^"]*";'
+$appIdMatches = [regex]::Matches($constantsText, $appIdPattern).Count
+$titleMatches = [regex]::Matches($constantsText, $titlePattern).Count
+if ($appIdMatches -gt 0) {
+    $constantsText = [regex]::Replace($constantsText, $appIdPattern, 'pub const WINDOW_APP_ID: &str = "com.orangeclient.launcher";')
+}
+if ($titleMatches -gt 0) {
+    $constantsText = [regex]::Replace($constantsText, $titlePattern, 'pub const WINDOW_TITLE: &str = "Orange Client";')
+}
+[System.IO.File]::WriteAllText($constantsPath, $constantsText, $utf8)
+Write-Host "Orange identity normalization: WINDOW_APP_ID matches=$appIdMatches; WINDOW_TITLE matches=$titleMatches."
+if (($appIdMatches -eq 0) -or ($titleMatches -eq 0)) {
+    Write-Host "Current constants.rs content:"
+    Get-Content -LiteralPath $constantsPath
+}
+
 # Package and installer properties. The crate and binary IDs stay stable internally to avoid breaking Cargo dependencies.
 Replace-SourceText "packages/oneclient_app/Cargo.toml" 'description = "OneClient Freya App"' 'description = "Orange Client Minecraft Launcher"'
 Replace-SourceText "packages/oneclient_app/Cargo.toml" 'product-name = "OneClient"' 'product-name = "Orange Client"'
