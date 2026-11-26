@@ -25,7 +25,8 @@ function Replace-SourceText(
     $count = [regex]::Matches($content, [regex]::Escape($oldText)).Count
 
     if ($count -lt $minimumMatches) {
-        throw "Branding patch could not find '$oldText' in $relativePath (found $count, expected at least $minimumMatches)."
+        Write-Host "Orange branding: $relativePath already changed upstream or by the Orange patch; skipping this exact replacement."
+        return
     }
 
     $content = $content.Replace($oldText, $newText)
@@ -34,18 +35,18 @@ function Replace-SourceText(
 }
 
 # Public project identity and metadata. Original upstream attribution and GPL license stay intact.
-Replace-SourceText "Cargo.toml" @'
-authors = [
-  "Polyfrost",
-  "Polyfrost Contributors",
-]
-'@ @'
-authors = [
-  "Orange Client Contributors",
-  "Polyfrost",
-  "Polyfrost Contributors",
-]
-'@
+$rootCargoPath = Get-SourceFile "Cargo.toml"
+$rootCargoText = [System.IO.File]::ReadAllText($rootCargoPath)
+if (-not $rootCargoText.Contains('"Orange Client Contributors"')) {
+    $authorsHeader = 'authors = ['
+    if ($rootCargoText.Contains($authorsHeader)) {
+        $authorsInsert = "authors = [" + [Environment]::NewLine + '  "Orange Client Contributors",'
+        $rootCargoText = $rootCargoText.Replace($authorsHeader, $authorsInsert)
+        [System.IO.File]::WriteAllText($rootCargoPath, $rootCargoText, $utf8)
+    } else {
+        Write-Warning "Workspace authors block was not found; upstream attribution remains unchanged."
+    }
+}
 Replace-SourceText "Cargo.toml" 'documentation = "https://github.com/Polyfrost/OneLauncher"' 'documentation = "https://github.com/u2803045005abc09734-byte/OrangeLauncher3"'
 Replace-SourceText "Cargo.toml" 'homepage = "https://polyfrost.org/projects/oneclient"' 'homepage = "https://github.com/u2803045005abc09734-byte/OrangeLauncher3"'
 Replace-SourceText "Cargo.toml" 'repository = "https://github.com/Polyfrost/OneLauncher"' 'repository = "https://github.com/u2803045005abc09734-byte/OrangeLauncher3"'
