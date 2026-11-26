@@ -468,7 +468,7 @@ impl Component for OrangeSocialPanel {
                 )
                 .child(
                     TextInput::new(password)
-                        .mode(InputMode::Password)
+                        .mode(InputMode::new_password())
                         .width(Size::fill())
                         .height(Size::px(38.))
                         .font_size(text_size(13.))
