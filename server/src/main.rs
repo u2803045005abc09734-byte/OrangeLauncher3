@@ -2,10 +2,7 @@ use std::{env, net::SocketAddr};
 
 use argon2::{
     Argon2,
-    password_hash::{
-        PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
-        rand_core::OsRng,
-    },
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 use axum::{
     Extension, Json, Router,
@@ -183,13 +180,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             post(reject_friend_request),
         )
         .route("/v1/friends/{friend_id}", delete(remove_friend))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            require_auth,
-        ));
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
-    let allowed_origins = env::var("ORANGE_CORS_ORIGINS")
-        .unwrap_or_else(|_| "http://localhost:3000".to_owned());
+    let allowed_origins =
+        env::var("ORANGE_CORS_ORIGINS").unwrap_or_else(|_| "http://localhost:3000".to_owned());
     let origins: Vec<HeaderValue> = allowed_origins
         .split(',')
         .filter_map(|origin| origin.trim().parse::<HeaderValue>().ok())
@@ -575,9 +569,7 @@ async fn reject_friend_request(
     Extension(auth): Extension<AuthContext>,
     Path(request_id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let result = sqlx::query(
-        "DELETE FROM friend_requests WHERE id = $1 AND recipient_id = $2",
-    )
+    let result = sqlx::query("DELETE FROM friend_requests WHERE id = $1 AND recipient_id = $2")
     .bind(request_id)
     .bind(auth.user_id)
     .execute(&state.pool)
@@ -630,9 +622,7 @@ async fn remove_friend(
     }
 
     let (user_a, user_b) = ordered_pair(auth.user_id, friend_id);
-    let result = sqlx::query(
-        "DELETE FROM friendships WHERE user_a = $1 AND user_b = $2",
-    )
+    let result = sqlx::query("DELETE FROM friendships WHERE user_a = $1 AND user_b = $2")
     .bind(user_a)
     .bind(user_b)
     .execute(&state.pool)
@@ -670,10 +660,7 @@ async fn verify_password(password: String, stored_hash: String) -> bool {
     .unwrap_or(false)
 }
 
-async fn create_session(
-    state: &AppState,
-    user_id: Uuid,
-) -> ApiResult<(String, DateTime<Utc>)> {
+async fn create_session(state: &AppState, user_id: Uuid) -> ApiResult<(String, DateTime<Utc>)> {
     // Two independently generated UUIDs provide a high-entropy opaque bearer token.
     let token = format!("{}.{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
     let token_hash = token_digest(&token);
