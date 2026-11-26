@@ -108,3 +108,6 @@ if (Test-Path -LiteralPath $gitDir) {
 Write-Host "Orange Client source assembled successfully."
 Write-Host "Upstream revision: $upstreamCommit"
 Write-Host "Patched source: $source"
+
+# Apply Orange Client product branding after upstream changes and security overrides.
+& (Join-Path $root "apply-orange-branding.ps1")
