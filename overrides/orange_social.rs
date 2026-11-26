@@ -1,6 +1,6 @@
 use freya::prelude::*;
 
-use crate::components::{Button, ButtonSize, TextInput};
+use crate::components::{Button, ButtonSize, ButtonVariant, TextInput};
 use crate::orange_api::{
     self, OrangeFriendRequest, OrangeSession, OrangeUser,
 };
@@ -199,6 +199,8 @@ impl Component for OrangeSocialPanel {
                 for request in request_rows {
                     let request_id = request.id;
                     let request_name = request.username.clone();
+                    let accept_name = request_name.clone();
+                    let reject_name = request_name.clone();
                     let accept_token = active.access_token.clone();
                     let accept_friends = friends;
                     let accept_requests = incoming;
@@ -244,7 +246,7 @@ impl Component for OrangeSocialPanel {
                                                     );
                                                     if let Ok(value) = friend_result { friends.set(value); }
                                                     if let Ok(value) = request_result { requests.set(value); }
-                                                    message.set(Some(format!("You and {request_name} are now friends.")));
+                                                    message.set(Some(format!("You and {accept_name} are now friends.")));
                                                 }
                                                 Err(error) => message.set(Some(error)),
                                             }
@@ -269,7 +271,7 @@ impl Component for OrangeSocialPanel {
                                                     requests.set(
                                                         orange_api::incoming_requests(&token).await.unwrap_or_default()
                                                     );
-                                                    message.set(Some(format!("Request from {request_name} declined.")));
+                                                    message.set(Some(format!("Request from {reject_name} declined.")));
                                                 }
                                                 Err(error) => message.set(Some(error)),
                                             }
