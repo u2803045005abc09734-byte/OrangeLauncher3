@@ -76,9 +76,19 @@ Replace-SourceText "packages/oneclient_app/build.rs" 'res.set("OriginalFilename"
 Replace-SourceText "packages/oneclient_app/build.rs" 'res.set("InternalName", "oneclient_app");' 'res.set("InternalName", "orange-client");'
 
 # macOS and Linux package display names.
-Replace-SourceText "packages/oneclient_app/distribution/Info.plist" '<string>OneClient</string>' '<string>Orange Client</string>'
-Replace-SourceText "packages/oneclient_app/distribution/linux/org.polyfrost.oneclient.template" 'Name=OneClient' 'Name=Orange Client'
-Replace-SourceText "packages/oneclient_app/distribution/linux/org.polyfrost.oneclient.template" 'Comment=Next-generation open source Minecraft launcher' 'Comment=Orange Client open-source Minecraft launcher'
+$infoPlistPath = Join-Path $source "packages/oneclient_app/distribution/Info.plist"
+if (Test-Path -LiteralPath $infoPlistPath -PathType Leaf) {
+    Replace-SourceText "packages/oneclient_app/distribution/Info.plist" '<string>OneClient</string>' '<string>Orange Client</string>'
+} else {
+    Write-Host "Orange branding: no macOS Info.plist in this Windows source tree; skipping."
+}
+$linuxTemplatePath = Join-Path $source "packages/oneclient_app/distribution/linux/org.polyfrost.oneclient.template"
+if (Test-Path -LiteralPath $linuxTemplatePath -PathType Leaf) {
+    Replace-SourceText "packages/oneclient_app/distribution/linux/org.polyfrost.oneclient.template" 'Name=OneClient' 'Name=Orange Client'
+    Replace-SourceText "packages/oneclient_app/distribution/linux/org.polyfrost.oneclient.template" 'Comment=Next-generation open source Minecraft launcher' 'Comment=Orange Client open-source Minecraft launcher'
+} else {
+    Write-Host "Orange branding: no Linux desktop template in this Windows source tree; skipping."
+}
 
 # Default appearance: Orange Pixel Dark, with orange accents across all built-in theme families.
 Replace-SourceText "packages/oneclient_core/src/settings/launcher.rs" 'theme: "dark".to_string(),' 'theme: "minecraft-dark".to_string()'
