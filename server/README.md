@@ -67,3 +67,12 @@ For protected routes send `Authorization: Bearer ACCESS_TOKEN`. Registration and
 - Add account recovery and abuse reporting before opening registration to the public.
 
 The development database password in `compose.yaml` is for local use only and must not be reused on a public server.
+
+## Starten ohne Shell (Windows)
+
+1. Installiere Docker Desktop und öffne es. Warte, bis Docker Desktop vollständig gestartet ist.
+2. Doppelklicke auf `Start-Orange-Server.vbs`. Das Skript startet die Datenbank und API im Hintergrund und zeigt eine Meldung an. Es öffnet kein Terminalfenster.
+3. Prüfe danach `http://localhost:8080/health`. Bei Erfolg wird `{"status":"ok"}` angezeigt.
+4. Zum Stoppen doppelklicke auf `Stop-Orange-Server.vbs`. Die PostgreSQL-Daten bleiben erhalten.
+
+Bei einem Fehler findest du die Ausgabe in `orange-server-start.log` bzw. `orange-server-stop.log`. Docker Desktop muss während des Betriebs geöffnet bleiben.
