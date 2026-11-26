@@ -1,0 +1,33 @@
+projects:
+  - name: OrangeClient
+    environments:
+      - name: production
+        services:
+          - type: web
+            name: orange-api
+            runtime: docker
+            plan: free
+            region: frankfurt
+            rootDir: server
+            dockerfilePath: Dockerfile
+            dockerContext: .
+            healthCheckPath: /health
+            autoDeployTrigger: commit
+            envVars:
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: orange-db
+                  property: connectionString
+              - key: BIND_ADDR
+                value: 0.0.0.0:10000
+              - key: SESSION_TTL_DAYS
+                value: "30"
+              - key: ORANGE_CORS_ORIGINS
+                value: http://localhost:3000
+        databases:
+          - name: orange-db
+            databaseName: orange
+            user: orange
+            plan: free
+            region: frankfurt
+            postgresMajorVersion: "18"
