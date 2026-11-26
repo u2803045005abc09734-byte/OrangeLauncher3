@@ -106,7 +106,19 @@ pub fn legacy_dir() -> Option<PathBuf> {
         .map(|dirs| dirs.data_local_dir().to_path_buf())
 }
 '@
-Replace-SourceText "packages/oneclient_common/src/paths.rs" 'if cfg!(debug_assertions) { "OneClient-dev" } else { "OneClient" }' 'if cfg!(debug_assertions) { "Orange Client-dev" } else { "Orange Client" }'
+Replace-SourceText "packages/oneclient_common/src/paths.rs" @'
+if cfg!(debug_assertions) {
+                "OneClient-dev"
+            } else {
+                "OneClient"
+            }
+'@ @'
+if cfg!(debug_assertions) {
+                "Orange Client-dev"
+            } else {
+                "Orange Client"
+            }
+'@
 
 # Update the on-screen wordmark and make the standalone logo asset match.
 Replace-SourceText "packages/oneclient_app/src/theme/mod.rs" '.text("ONECLIENT")' '.text("ORANGE CLIENT")'
