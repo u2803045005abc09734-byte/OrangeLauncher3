@@ -237,10 +237,15 @@ foreach ($file in Get-ChildItem -LiteralPath $langDir -Filter "*.json" -File) {
     }
 }
 
+# Remove the upstream project-owner/special inbox from Orange Client.
+# Orange Client users should only see the normal Chats, Friends and Groups sections.
+Replace-SourceText "packages/oneclient_app/src/view/chat/panel.rs" 'special_target: chat.special_target,' 'special_target: false,'
+
 # Verify the resulting visible branding before compiling.
 $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_APP_ID: &str = "com.orangeclient.launcher"' },
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_TITLE: &str = "Orange Client"' },
+    @{ Path = "packages/oneclient_app/src/view/chat/panel.rs"; Text = "special_target: false," },
     @{ Path = "packages/oneclient_app/Cargo.toml"; Text = 'product-name = "Orange Client"' },
     @{ Path = "packages/oneclient_app/assets/themes/minecraft-dark.json"; Text = '"accent": "#FF7A18"' },
     @{ Path = "packages/oneclient_core/src/settings/launcher.rs"; Text = 'theme: "minecraft-dark".to_string()' }
