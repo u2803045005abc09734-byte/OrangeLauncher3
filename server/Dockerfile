@@ -14,5 +14,5 @@ RUN apt-get update \
 
 COPY --from=builder /app/target/release/orange-server /usr/local/bin/orange-server
 
-EXPOSE 8080
+EXPOSE 10000
 CMD ["orange-server"]
