@@ -8,6 +8,7 @@ on:
       - "build/READY"
       - "overrides/**"
       - "prepare-source.ps1"
+      - "apply-orange-branding.ps1"
   workflow_dispatch:
 
 permissions:
