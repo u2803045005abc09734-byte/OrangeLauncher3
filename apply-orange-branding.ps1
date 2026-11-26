@@ -112,14 +112,19 @@ if (Test-Path -LiteralPath $linuxTemplatePath -PathType Leaf) {
 
 # Default appearance: Orange Pixel Dark, with orange accents across all built-in theme families.
 Replace-SourceText "packages/oneclient_core/src/settings/launcher.rs" 'theme: "dark".to_string(),' 'theme: "minecraft-dark".to_string()'
-Replace-SourceText "packages/oneclient_app/assets/themes/dark.json" '"name": "PolyGlass Dark"' '"name": "Orange Dark"'
-Replace-SourceText "packages/oneclient_app/assets/themes/dark.json" '"accent": "#2B4BFF"' '"accent": "#FF7A18"'
-Replace-SourceText "packages/oneclient_app/assets/themes/light.json" '"name": "PolyGlass Light"' '"name": "Orange Light"'
-Replace-SourceText "packages/oneclient_app/assets/themes/light.json" '"accent": "#2B4BFF"' '"accent": "#E65C00"'
-Replace-SourceText "packages/oneclient_app/assets/themes/minecraft-dark.json" '"name": "Minecraft Dark"' '"name": "Orange Pixel Dark"'
-Replace-SourceText "packages/oneclient_app/assets/themes/minecraft-dark.json" '"accent": "#2B4BFF"' '"accent": "#FF7A18"'
-Replace-SourceText "packages/oneclient_app/assets/themes/minecraft-light.json" '"name": "Minecraft Light"' '"name": "Orange Pixel Light"'
-Replace-SourceText "packages/oneclient_app/assets/themes/minecraft-light.json" '"accent": "#2B4BFF"' '"accent": "#E65C00"'
+function Set-OrangeTheme([string]$relativePath, [string]$name, [string]$accent) {
+    $path = Get-SourceFile $relativePath
+    $theme = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+    $theme.name = $name
+    $theme.colors.accent = $accent
+    $json = $theme | ConvertTo-Json -Depth 12
+    [System.IO.File]::WriteAllText($path, $json + [Environment]::NewLine, $utf8)
+    Write-Host "Orange branding: configured $name with accent $accent."
+}
+Set-OrangeTheme "packages/oneclient_app/assets/themes/dark.json" "Orange Dark" "#FF7A18"
+Set-OrangeTheme "packages/oneclient_app/assets/themes/light.json" "Orange Light" "#E65C00"
+Set-OrangeTheme "packages/oneclient_app/assets/themes/minecraft-dark.json" "Orange Pixel Dark" "#FF7A18"
+Set-OrangeTheme "packages/oneclient_app/assets/themes/minecraft-light.json" "Orange Pixel Light" "#E65C00"
 
 # Keep the old OneClient folder as the migration source, but use Orange Client for all new user data.
 Replace-SourceText "packages/oneclient_common/src/paths.rs" 'const ORGANIZATION: &str = "Polyfrost";' 'const ORGANIZATION: &str = "OrangeClient";'
