@@ -1,108 +1,38 @@
-<div align="center">
+# Orange Client
 
-<img src=".github/media/RepoBanner.png" alt="Repository Banner" />
+**Orange Client** is a community-maintained, Orange-branded Minecraft Java launcher for Windows, based on the open-source OneLauncher project.
 
-# OneClient  |  OneLauncher
-The monorepo containing the code for OneLauncher, OneClient, and their core backend.
+It provides Microsoft account sign-in, Minecraft instance management, modpack installation, Java management, and mod browsing through the services supported by its upstream foundation. The default launcher appearance is **Orange Pixel Dark**, with orange as the accent colour.
 
-OneClient is a Minecraft client featuring fully 100% open-source components, offering many packaged and pre-configured mods in one click.
+> **Project status:** This is an early community fork. It is not an official Polyfrost release, and it does not yet have an independent public release history or an independent Microsoft app registration.
 
-</div>
+## Downloads and builds
 
-## Installing
+Windows x64 builds are produced from the `orange-client` branch by GitHub Actions:
 
-You can install the latest release of OneClient from our website: [https://polyfrost.org/projects/oneclient](https://polyfrost.org/projects/oneclient)
-as well as our [GitHub releases](https://github.com/Polyfrost/OneLauncher/releases/latest).
+- [Windows build workflow](https://github.com/u2803045005abc09734-byte/OrangeLauncher3/actions)
+- [Repository source](https://github.com/u2803045005abc09734-byte/OrangeLauncher3)
 
-| Windows (x86_64) | macOS (Intel & Apple Silicon) | Linux (x86_64)                                          |
-|------------------|-------------------------------|---------------------------------------------------------|
-| Installer 🔄      | DMG 🔄                        | AppImage 🔄                                             |
-|                  | App Bundle 🔄                 | DEB                                                     |
-|                  |                               | RPM                                                     |
-|                  |                               | *[RPM (COPR)](https://copr.fedorainfracloud.org/coprs/polyfrost/OneClient/) 🔄 |
-|                  |                               | [AUR](https://aur.archlinux.org/packages/oneclient-bin)|
-|                  |                               | Flatpak|
+The workflow assembles the pinned upstream source, applies the Orange Client changes and security overrides, runs the Windows account-data protection tests, builds the launcher and installer, and scans the final Windows files with Microsoft Defender.
 
-> 🔄 = Has support for autoupdating built-in
+**Code signing:** SignPath Foundation integration is prepared but requires separate project approval and configuration. Until a signed release is published, downloaded builds may still be reported as an unknown publisher by Windows.
 
-<details>
+## Microsoft account sign-in
 
-<summary><h3>Flatpak Installation</h3></summary>
+Microsoft authentication currently uses the public OAuth application registration from the upstream OneLauncher project so that Microsoft sign-in continues to work. As a result, Microsoft's consent screen may still display **OneClient/OneLauncher**. Changing the displayed consent-screen name requires an Orange Client-owned Microsoft application registration; changing the launcher UI cannot rename somebody else's Microsoft registration.
 
-On most big distros, you can just double-click the .flatpak file to install it. You can also:
-1. First, navigate to the folder the .flatpak was downloaded in: (e.g. Downloads)
-```
-cd Downloads
-```
-2. You can then install the package: (change filename with the one you downloaded)
-```
-flatpak install ./OneClient_2.11.0_linux_x86_64.flatpak 
-```
-</details>
-<details>
+## Data migration and account protection
 
-<summary><h3>COPR Installation</h3></summary>
+On Windows, saved account data is protected with Windows DPAPI. The first Orange Client launch migrates the existing OneClient settings and data folder to the Orange Client data folder where applicable. Do not manually delete the old launcher data folder before the first Orange Client launch.
 
-On supported distributions (RHEL, Fedora, etc.), you can make use of the Fedora COPR instead of using the AppImage or manually installing the RPM file.
-1. First, you have to enable the repository:
-```
-sudo dnf copr enable polyfrost/OneClient
-```
-2. You can then install the package:
-```
-sudo dnf install oneclient-bin
-```
+## Building from source
 
-</details>
+The project uses Rust and GitHub Actions. The Windows workflow builds the source assembled by `prepare-source.ps1` and `apply-orange-branding.ps1`.
 
-## Contributing
+## Upstream attribution and license
 
-We welcome contributions! Please read our [contributing guidelines](CONTRIBUTING.md) before getting started.
+Orange Client is a modified community fork of [Polyfrost/OneLauncher](https://github.com/Polyfrost/OneLauncher), based on its GPL-3.0-licensed source. Original copyright notices, upstream attribution, and the GPL-3.0 license are retained. Internal crate names and compatibility identifiers remain unchanged where renaming them would break dependencies, saved data, or launcher functionality.
 
+Some upstream service endpoints (including metadata and related launcher services) are retained so the corresponding features continue to work. These are third-party services, not Orange Client-owned services.
 
-### Requirements
-
-The project targets **Rust 1.97** or later. You can install Rust via [rustup](https://rustup.rs/).
-
-
-### Building & Running
-
-```sh
-# Run the app
-cargo run -p oneclient_app
-
-# Build a release binary
-cargo build -p oneclient_app --release
-```
-
-
-### Packaging / Releasing
-
-Installers are produced with [**cargo-packager**](https://github.com/crabnebula-dev/cargo-packager)
-(the standalone bundler spun out of the Tauri bundler). Config lives in
-[`packages/oneclient_app/Cargo.toml`](./packages/oneclient_app/Cargo.toml) under
-`[package.metadata.packager]`.
-
-```sh
-cargo install cargo-packager --locked
-
-# Build the binary, then bundle it for the current OS:
-cargo build --release -p oneclient_app
-cargo packager --release -p oneclient_app --formats <targets>
-#   Windows: nsis      macOS: app,dmg      Linux: deb,appimage
-```
-
-
-### Versioning
-
-The workspace shares a single version, defined in the root [`Cargo.toml`](./Cargo.toml) under `[workspace.package]`.
-
-Versions and release notes come from [Knope](https://knope.tech) change files in [`.changeset/`](./.changeset).
-Add one per user-facing change with `knope document-change` (installed via `cargo install knope`). The
-`OneClient Release Build` workflow consumes them, bumps the version, writes [`CHANGELOG.md`](./CHANGELOG.md),
-and uses the new entry as the GitHub release body, which is what the launcher's changelog page shows.
-
-
-## Code signing
-
-This program uses free code signing provided by [SignPath.io](https://signpath.io?utm_source=foundation&utm_medium=github&utm_campaign=0install), and a certificate by the [SignPath Foundation](https://signpath.org?utm_source=foundation&utm_medium=github&utm_campaign=0install). We thank them very much to their contributions to OSS software!
+See [LICENSE](LICENSE) for the full license text.
