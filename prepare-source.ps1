@@ -30,7 +30,16 @@ if (Test-Path -LiteralPath $source) {
 }
 
 git clone --branch "orange-client" "https://github.com/u2803045005abc09734-byte/OrangeLauncher3.git" $source
-if ($LASTEXITCODE -ne 0) { throw "Could not clone the pinned upstream source." }
+if ($LASTEXITCODE -ne 0) { throw "Could not clone the Orange Client source repository." }
+
+# Build the exact commit that triggered this GitHub Actions run. This keeps
+# the source revision tied to GitHub's origin metadata for trusted signing.
+$sourceRevision = $env:GITHUB_SHA
+if ([string]::IsNullOrWhiteSpace($sourceRevision)) {
+    $sourceRevision = "orange-client"
+}
+git -C $source checkout --detach $sourceRevision
+if ($LASTEXITCODE -ne 0) { throw "Could not check out the exact Orange Client source revision: $sourceRevision" }
 
 $upstreamCommit = (git -C $source rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($upstreamCommit)) {
