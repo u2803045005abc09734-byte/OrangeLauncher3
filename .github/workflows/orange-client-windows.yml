@@ -7,8 +7,13 @@ on:
     paths:
       - "build/READY"
       - "overrides/**"
+      - "patch/**"
+      - "branding/**"
+      - ".signpath/**"
       - "prepare-source.ps1"
       - "apply-orange-branding.ps1"
+      - "generate-icon.py"
+      - "Cargo.toml"
       - ".github/workflows/orange-client-windows.yml"
   workflow_dispatch:
 
@@ -166,15 +171,29 @@ jobs:
           $files = @(Get-Item "source/target/release/orange-client.exe"; Get-ChildItem "source/target/release/*-setup.exe" -File)
           if ($files.Count -lt 2) { throw "The portable app or setup installer is missing." }
           if (-not (Get-Command Start-MpScan -ErrorAction SilentlyContinue)) { throw "Microsoft Defender scan cmdlet is unavailable." }
+
           $scanStart = Get-Date
+          $scanTokens = @($files | ForEach-Object { $_.FullName; $_.Name })
           foreach ($file in $files) {
-            Write-Host "Scanning $($file.Name)..."
+            Write-Host "Scanning $($file.FullName)..."
             Start-MpScan -ScanType CustomScan -ScanPath $file.FullName
           }
-          $detections = Get-MpThreatDetection -ErrorAction SilentlyContinue | Where-Object {
-            $_.InitialDetectionTime -ge $scanStart -and (($_.Resources -join " ") -match "orange-client")
+
+          $detections = @(Get-MpThreatDetection -ErrorAction SilentlyContinue | Where-Object {
+            if ($_.InitialDetectionTime -lt $scanStart) { return $false }
+            $resourceText = $_.Resources -join " "
+            foreach ($token in $scanTokens) {
+              if (-not [string]::IsNullOrWhiteSpace($token) -and
+                  $resourceText.IndexOf($token, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                return $true
+              }
+            }
+            return $false
+          })
+          if ($detections.Count -gt 0) {
+            $detections | Format-List ThreatID,DetectionID,InitialDetectionTime,Resources | Out-String | Write-Host
+            throw "Microsoft Defender detected a threat in one of the final release files. Nothing will be published."
           }
-          if ($detections) { throw "Microsoft Defender detected a threat. Nothing will be published." }
           Write-Host "No new Microsoft Defender detections for final release files."
       - name: Generate SHA-256 checksums and signing status
         shell: pwsh
@@ -193,14 +212,14 @@ jobs:
       - name: Upload final portable executable
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: Orange-Client-Windows-x64-Portable
+          name: ${{ steps.signing.outputs.enabled == 'true' && 'Orange-Client-Windows-x64-Portable' || 'Orange-Client-Windows-x64-Portable-UNSIGNED' }}
           path: source/target/release/orange-client.exe
           if-no-files-found: error
           retention-days: 14
       - name: Upload final Windows installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: Orange-Client-Windows-x64-Setup
+          name: ${{ steps.signing.outputs.enabled == 'true' && 'Orange-Client-Windows-x64-Setup' || 'Orange-Client-Windows-x64-Setup-UNSIGNED' }}
           path: source/target/release/*-setup.exe
           if-no-files-found: error
           retention-days: 14
