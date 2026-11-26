@@ -570,10 +570,10 @@ async fn reject_friend_request(
     Path(request_id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
     let result = sqlx::query("DELETE FROM friend_requests WHERE id = $1 AND recipient_id = $2")
-    .bind(request_id)
-    .bind(auth.user_id)
-    .execute(&state.pool)
-    .await?;
+        .bind(request_id)
+        .bind(auth.user_id)
+        .execute(&state.pool)
+        .await?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::not_found("friend request not found"));
@@ -623,10 +623,10 @@ async fn remove_friend(
 
     let (user_a, user_b) = ordered_pair(auth.user_id, friend_id);
     let result = sqlx::query("DELETE FROM friendships WHERE user_a = $1 AND user_b = $2")
-    .bind(user_a)
-    .bind(user_b)
-    .execute(&state.pool)
-    .await?;
+        .bind(user_a)
+        .bind(user_b)
+        .execute(&state.pool)
+        .await?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::not_found("friendship not found"));
