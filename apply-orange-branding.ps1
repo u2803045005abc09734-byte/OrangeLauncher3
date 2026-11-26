@@ -169,6 +169,8 @@ if cfg!(debug_assertions) {
 
 # Replace the upstream wordmark and its licensed logo mark with original Orange Client branding.
 Replace-SourceText "packages/oneclient_app/src/theme/mod.rs" '.text("ONECLIENT")' '.text("ORANGE CLIENT")'
+# The launcher-level status/version label lives in oneclient_common, not the app translation files.
+Replace-SourceText "packages/oneclient_common/src/constants.rs" '"OneClient v"' '"Orange Client v"'
 $logo = Get-SourceFile "packages/oneclient_app/assets/logo.svg"
 $logoSvg = @'
 <svg width="200" height="32" viewBox="0 0 200 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -198,8 +200,8 @@ foreach ($relativePath in $logoAssets) {
     }
 }
 Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" '.size(COMPACT_LOGO_PX)
-                .color(primary_color(over_art))' '.size(COMPACT_LOGO_PX)
-                .color(theme::colors::brand())'
+                .color(theme::colors::brand())' '.size(COMPACT_LOGO_PX)
+                .color(primary_color(over_art))'
 
 # Replace product-name mentions in UI string literals, but preserve translation keys and source identifiers.
 $uiSource = Join-Path $source "packages/oneclient_app/src"
@@ -281,6 +283,8 @@ Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" 
 $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_APP_ID: &str = "com.orangeclient.launcher"' },
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_TITLE: &str = "Orange Client"' },
+    @{ Path = "packages/oneclient_app/src/theme/mod.rs"; Text = '.text("ORANGE CLIENT")' },
+    @{ Path = "packages/oneclient_common/src/constants.rs"; Text = '"Orange Client v"' },
     @{ Path = "packages/oneclient_app/Cargo.toml"; Text = "reqwest.workspace = true" },
     @{ Path = "packages/oneclient_app/src/lib.rs"; Text = "mod orange_api;" },
     @{ Path = "packages/oneclient_app/src/view/chat/mod.rs"; Text = "mod orange_social;" },
