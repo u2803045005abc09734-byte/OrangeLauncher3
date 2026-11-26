@@ -237,6 +237,46 @@ foreach ($file in Get-ChildItem -LiteralPath $langDir -Filter "*.json" -File) {
     }
 }
 
+# Connect Orange Client's social entry point to the Orange-owned API instead of Polyfrost social.
+Replace-SourceText "packages/oneclient_app/Cargo.toml" 'oneclient_common.workspace = true' @'
+oneclient_common.workspace = true
+reqwest.workspace = true
+'@
+Replace-SourceText "packages/oneclient_app/src/lib.rs" 'mod assets;' @'
+mod assets;
+mod orange_api;
+'@
+Replace-SourceText "packages/oneclient_app/src/view/chat/mod.rs" 'mod overlay;' @'
+mod overlay;
+mod orange_social;
+'@
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use crate::hooks::{use_chat_allowed, use_dispatch, use_social_open, use_social_popped_notice};' 'use crate::hooks::{use_dispatch, use_social_open, use_social_popped_notice};'
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" '        let allowed = use_chat_allowed();' ''
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" '        if !allowed || (!open && !notice) {' '        if !open && !notice {'
+Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" '        use_chat_allowed, use_chat_unread, use_clusters, use_current_account, use_dispatch,' '        use_clusters, use_current_account, use_dispatch,'
+Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" '        let unread_chats = use_chat_unread();' ''
+Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" '        let chat_allowed = use_chat_allowed();' ''
+Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" @'
+        let has_account = settled_or_loading(&current_account)
+            .is_none_or(|account| account.is_some_and(|account| account.is_microsoft()));
+'@ ''
+Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" @'
+            .maybe_child(chat_allowed.then(|| {
+                super::navbar_button(foreground)
+                    .tooltip(t("oneclient.components.navbar.social"))
+                    .enabled(has_account)
+                    .child(social_icon(unread_chats))
+                    .on_press(toggle_social)
+            }))
+'@ @'
+            .child(
+                super::navbar_button(foreground)
+                    .tooltip(t("oneclient.components.navbar.social"))
+                    .child(social_icon(false))
+                    .on_press(toggle_social),
+            )
+'@
+
 # Remove the upstream project-owner/special inbox from Orange Client.
 # Orange Client users should only see the normal Chats, Friends and Groups sections.
 Replace-SourceText "packages/oneclient_app/src/view/chat/panel.rs" 'special_target: chat.special_target,' 'special_target: false,'
