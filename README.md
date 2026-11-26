@@ -4,6 +4,8 @@
 
 It provides Microsoft account sign-in, Minecraft instance management, modpack installation, Java management, and mod browsing through the services supported by its upstream foundation. The default launcher appearance is **Orange Pixel Dark**, with orange as the accent colour.
 
+**Project maintainer:** CleanOrange (Minecraft username). The launcher is maintained independently on this fork; its source ancestry and required GPL attribution are documented below.
+
 > **Project status:** This is an early community fork. It is not an official Polyfrost release, and it does not yet have an independent public release history or an independent Microsoft app registration.
 
 ## Downloads and builds

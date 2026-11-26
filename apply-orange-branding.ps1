@@ -37,10 +37,10 @@ function Replace-SourceText(
 # Public project identity and metadata. Original upstream attribution and GPL license stay intact.
 $rootCargoPath = Get-SourceFile "Cargo.toml"
 $rootCargoText = [System.IO.File]::ReadAllText($rootCargoPath)
-if (-not $rootCargoText.Contains('"Orange Client Contributors"')) {
+if (-not $rootCargoText.Contains('"CleanOrange"')) {
     $authorsHeader = 'authors = ['
     if ($rootCargoText.Contains($authorsHeader)) {
-        $authorsInsert = "authors = [" + [Environment]::NewLine + '  "Orange Client Contributors",'
+        $authorsInsert = "authors = [" + [Environment]::NewLine + '  "CleanOrange",'
         $rootCargoText = $rootCargoText.Replace($authorsHeader, $authorsInsert)
         [System.IO.File]::WriteAllText($rootCargoPath, $rootCargoText, $utf8)
     } else {
@@ -81,14 +81,14 @@ if (($appIdMatches -eq 0) -or ($titleMatches -eq 0)) {
 Replace-SourceText "packages/oneclient_app/Cargo.toml" 'description = "OneClient Freya App"' 'description = "Orange Client Minecraft Launcher"'
 Replace-SourceText "packages/oneclient_app/Cargo.toml" 'product-name = "OneClient"' 'product-name = "Orange Client"'
 Replace-SourceText "packages/oneclient_app/Cargo.toml" 'identifier = "org.polyfrost.OneClient"' 'identifier = "com.orangeclient.launcher"'
-Replace-SourceText "packages/oneclient_app/Cargo.toml" 'publisher = "Polyfrost Inc."' 'publisher = "Orange Client Contributors"'
+Replace-SourceText "packages/oneclient_app/Cargo.toml" 'publisher = "Polyfrost Inc."' 'publisher = "CleanOrange"'
 Replace-SourceText "packages/oneclient_app/Cargo.toml" 'copyright = "© 2026 Polyfrost Inc."' 'copyright = "© 2026 Polyfrost Inc. and Orange Client contributors"'
 Replace-SourceText "packages/oneclient_app/Cargo.toml" 'homepage = "https://polyfrost.org/projects/oneclient"' 'homepage = "https://github.com/u2803045005abc09734-byte/OrangeLauncher3"'
 Replace-SourceText "packages/oneclient_app/Cargo.toml" 'long-description = "Next-generation open source Minecraft launcher"' 'long-description = "Orange Client is an open-source Minecraft launcher with Microsoft account sign-in, modpack management and an Orange-themed interface."'
 Replace-SourceText "packages/oneclient_app/Cargo.toml" 'This build of OneClient needs the Microsoft Visual C++ Redistributable' 'This build of Orange Client needs the Microsoft Visual C++ Redistributable'
 
 # Windows executable metadata.
-Replace-SourceText "packages/oneclient_app/build.rs" 'res.set("CompanyName", "Polyfrost Inc.");' 'res.set("CompanyName", "Orange Client Contributors");'
+Replace-SourceText "packages/oneclient_app/build.rs" 'res.set("CompanyName", "Polyfrost Inc.");' 'res.set("CompanyName", "CleanOrange");'
 Replace-SourceText "packages/oneclient_app/build.rs" 'res.set("ProductName", "OneClient");' 'res.set("ProductName", "Orange Client");'
 Replace-SourceText "packages/oneclient_app/build.rs" 'res.set("FileDescription", "OneClient");' 'res.set("FileDescription", "Orange Client Minecraft Launcher");'
 Replace-SourceText "packages/oneclient_app/build.rs" 'res.set("LegalCopyright", "© 2026 Polyfrost Inc.");' 'res.set("LegalCopyright", "© 2026 Polyfrost Inc. and Orange Client contributors");'
@@ -167,7 +167,7 @@ if cfg!(debug_assertions) {
             }
 '@
 
-# Update the on-screen wordmark and make the standalone logo asset match.
+# Replace the upstream wordmark and its licensed logo mark with original Orange Client branding.
 Replace-SourceText "packages/oneclient_app/src/theme/mod.rs" '.text("ONECLIENT")' '.text("ORANGE CLIENT")'
 $logo = Get-SourceFile "packages/oneclient_app/assets/logo.svg"
 $logoSvg = @'
@@ -176,6 +176,27 @@ $logoSvg = @'
 </svg>
 '@
 [System.IO.File]::WriteAllText($logo, $logoSvg, $utf8)
+
+# Original Orange pixel-mark: replace the old Polyfrost/OneClient logo wherever
+# the launcher UI or secondary-window icon loads it.
+$orangeMark = @'
+<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path fill="#FF7A18" fill-rule="evenodd" d="M24 7H56V15H64V24H72V56H64V64H56V72H24V64H16V56H8V24H16V16H24V7ZM32 23H48V31H56V49H48V57H32V49H24V31H32V23Z"/>
+  <path d="M33 31H47V35H51V45H47V49H33V45H29V35H33V31Z" fill="#FFB36B"/>
+</svg>
+'@
+$logoAssets = @(
+    "packages/oneclient_app/assets/icons/icon-logo.svg",
+    "packages/oneclient_app/assets/icons/pixel/icon-logo.svg",
+    "packages/oneclient_app/icons/OneClient.icon/Assets/oneclient-mark.svg"
+)
+foreach ($relativePath in $logoAssets) {
+    $path = Join-Path $source $relativePath
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+        [System.IO.File]::WriteAllText($path, $orangeMark, $utf8)
+        Write-Host "Orange branding: replaced legacy logo asset $relativePath."
+    }
+}
 Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" '.size(COMPACT_LOGO_PX)
                 .color(primary_color(over_art))' '.size(COMPACT_LOGO_PX)
                 .color(theme::colors::brand())'
@@ -189,7 +210,7 @@ foreach ($file in Get-ChildItem -LiteralPath $uiSource -Recurse -Filter "*.rs" -
         '"(?<value>(?:\\.|[^"\\])*)"',
         [System.Text.RegularExpressions.MatchEvaluator]{
             param($match)
-            $value = $match.Groups["value"].Value.Replace("OneClient", "Orange Client")
+            $value = $match.Groups["value"].Value.Replace("OneClient", "Orange Client").Replace("OneLauncher", "Orange Client")
             return '"' + $value + '"'
         }
     )
