@@ -199,6 +199,18 @@ foreach ($relativePath in $logoAssets) {
         Write-Host "Orange branding: replaced legacy logo asset $relativePath."
     }
 }
+
+# Keep the user's transparent white badge separate from the full-color Windows app icon.
+# The Windows icon pipeline consumes branding/orange-icon.png.b64; this white mark is
+# embedded as a distinct asset for the in-game player-list badge integration.
+$whiteBadgeB64 = Join-Path $PSScriptRoot "branding/orange-mark-white.png.b64"
+if (-not (Test-Path -LiteralPath $whiteBadgeB64 -PathType Leaf)) {
+    throw "Missing transparent white Orange Client badge asset: $whiteBadgeB64"
+}
+$whiteBadgeBytes = [Convert]::FromBase64String((Get-Content -LiteralPath $whiteBadgeB64 -Raw).Trim())
+$whiteBadgePath = Join-Path $source "packages/oneclient_app/assets/orange-client-mark-white.png"
+[System.IO.File]::WriteAllBytes($whiteBadgePath, $whiteBadgeBytes)
+Write-Host "Orange branding: embedded the separate transparent white in-game badge asset."
 Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" '.size(COMPACT_LOGO_PX)
                 .color(theme::colors::brand())' '.size(COMPACT_LOGO_PX)
                 .color(primary_color(over_art))'
