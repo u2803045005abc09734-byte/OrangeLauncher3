@@ -76,10 +76,12 @@ $securityOverrides = @(
     @{
         Source = "orange_api.rs"
         Destination = "packages/oneclient_app/src/orange_api.rs"
+        AllowCreate = $true
     },
     @{
         Source = "orange_social.rs"
         Destination = "packages/oneclient_app/src/view/chat/orange_social.rs"
+        AllowCreate = $true
     },
     @{
         Source = "orange_social_panel.rs"
@@ -94,7 +96,11 @@ foreach ($override in $securityOverrides) {
     if (-not (Test-Path -LiteralPath $overridePath -PathType Leaf)) {
         throw "Missing Orange Client security override: $overridePath"
     }
-    if (-not (Test-Path -LiteralPath $destinationPath -PathType Leaf)) {
+    $destinationDirectory = Split-Path -Parent $destinationPath
+    if (-not (Test-Path -LiteralPath $destinationDirectory -PathType Container)) {
+        throw "Security override target directory does not exist: $destinationDirectory"
+    }
+    if (-not $override.AllowCreate -and -not (Test-Path -LiteralPath $destinationPath -PathType Leaf)) {
         throw "Security override target does not exist: $destinationPath"
     }
     Copy-Item -LiteralPath $overridePath -Destination $destinationPath -Force
