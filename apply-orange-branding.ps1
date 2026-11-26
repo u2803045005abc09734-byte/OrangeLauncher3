@@ -111,7 +111,7 @@ if (Test-Path -LiteralPath $linuxTemplatePath -PathType Leaf) {
 }
 
 # Default appearance: Orange Pixel Dark, with orange accents across all built-in theme families.
-Replace-SourceText "packages/oneclient_core/src/settings/launcher.rs" 'theme: "dark".to_string(),' 'theme: "minecraft-dark".to_string()'
+Replace-SourceText "packages/oneclient_core/src/settings/launcher.rs" 'theme: "dark".to_string(),' 'theme: "minecraft-dark".to_string(),'
 function Set-OrangeTheme([string]$relativePath, [string]$name, [string]$accent) {
     $path = Get-SourceFile $relativePath
     $theme = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
