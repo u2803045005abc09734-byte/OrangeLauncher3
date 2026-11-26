@@ -57,6 +57,10 @@ jobs:
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: "source -> target"
+      - name: Resolve lockfile for Orange API dependency
+        working-directory: source
+        shell: pwsh
+        run: cargo metadata --format-version 1 > $null
       - name: Test Windows account-data protection
         working-directory: source
         run: cargo test --locked -p oneclient_auth
