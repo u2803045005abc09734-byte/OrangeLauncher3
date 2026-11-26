@@ -277,15 +277,16 @@ Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" 
             )
 '@
 
-# Remove the upstream project-owner/special inbox from Orange Client.
-# Orange Client users should only see the normal Chats, Friends and Groups sections.
-Replace-SourceText "packages/oneclient_app/src/view/chat/panel.rs" 'special_target: chat.special_target,' 'special_target: false,'
-
 # Verify the resulting visible branding before compiling.
 $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_APP_ID: &str = "com.orangeclient.launcher"' },
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_TITLE: &str = "Orange Client"' },
-    @{ Path = "packages/oneclient_app/src/view/chat/panel.rs"; Text = "special_target: false," },
+    @{ Path = "packages/oneclient_app/Cargo.toml"; Text = "reqwest.workspace = true" },
+    @{ Path = "packages/oneclient_app/src/lib.rs"; Text = "mod orange_api;" },
+    @{ Path = "packages/oneclient_app/src/view/chat/mod.rs"; Text = "mod orange_social;" },
+    @{ Path = "packages/oneclient_app/src/view/chat/panel.rs"; Text = "OrangeSocialPanel.into_element()" },
+    @{ Path = "packages/oneclient_app/src/view/chat/overlay.rs"; Text = "if !open && !notice {" },
+    @{ Path = "packages/oneclient_app/src/components/navbar/app_navbar.rs"; Text = "social_icon(false)" },
     @{ Path = "packages/oneclient_app/Cargo.toml"; Text = 'product-name = "Orange Client"' },
     @{ Path = "packages/oneclient_app/assets/themes/minecraft-dark.json"; Text = '"accent": "#FF7A18"' },
     @{ Path = "packages/oneclient_core/src/settings/launcher.rs"; Text = 'theme: "minecraft-dark".to_string()' }
