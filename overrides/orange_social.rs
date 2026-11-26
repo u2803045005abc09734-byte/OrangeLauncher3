@@ -1,6 +1,7 @@
 use freya::prelude::*;
 
 use crate::components::{Button, ButtonSize, ButtonVariant, TextInput};
+use crate::hooks::{try_default_account, use_current_account};
 use crate::orange_api::{
     self, OrangeFriendRequest, OrangeSession, OrangeUser,
 };
@@ -12,55 +13,21 @@ pub(super) struct OrangeSocialPanel;
 impl Component for OrangeSocialPanel {
     fn render(&self) -> impl IntoElement {
         let mut session = use_state(|| None::<OrangeSession>);
-        let mut ready = use_state(|| false);
         let mut busy = use_state(|| false);
-        let mut username = use_state(String::new);
-        let mut password = use_state(String::new);
-        let mut registering = use_state(|| false);
         let mut search = use_state(String::new);
         let mut search_results = use_state(Vec::<OrangeUser>::new);
         let mut friends = use_state(Vec::<OrangeUser>::new);
         let mut incoming = use_state(Vec::<OrangeFriendRequest>::new);
         let mut message = use_state(|| None::<String>);
 
-        use_hook({
-            let mut session = session;
-            let mut ready = ready;
-            let mut friends = friends;
-            let mut incoming = incoming;
-            let mut message = message;
-            move || {
-                spawn_global(async move {
-                    match orange_api::load_saved_session().await {
-                        Ok(Some(saved)) => {
-                            let token = saved.access_token.clone();
-                            session.set(Some(saved));
-                            let (friend_result, request_result) = tokio::join!(
-                                orange_api::friends(&token),
-                                orange_api::incoming_requests(&token)
-                            );
-                            match friend_result {
-                                Ok(value) => friends.set(value),
-                                Err(error) if error.starts_with("AUTH:") => {
-                                    orange_api::clear_saved_session().await;
-                                    session.set(None);
-                                    message.set(Some("Your Orange session expired. Please sign in again.".to_string()));
-                                }
-                                Err(error) => message.set(Some(error)),
-                            }
-                            if let Ok(value) = request_result {
-                                incoming.set(value);
-                            }
-                        }
-                        Ok(None) => {}
-                        Err(error) => message.set(Some(error)),
-                    }
-                    ready.set(true);
-                });
-            }
+        let current_account_query = use_current_account();
+        let minecraft_account = try_default_account(&current_account_query);
+        let saved_session = session.read().clone();
+        let signed_in = saved_session.filter(|saved| {
+            minecraft_account
+                .as_ref()
+                .is_some_and(|account| saved.minecraft_account_id == Some(account.id))
         });
-
-        let signed_in = session.read().clone();
         let friend_rows = friends.read().clone();
         let request_rows = incoming.read().clone();
         let result_rows = search_results.read().clone();
@@ -86,26 +53,11 @@ impl Component for OrangeSocialPanel {
                 )
                 .child(
                     label()
-                        .text("Your Orange account and friends")
+                        .text("Your Minecraft account and friends")
                         .font_size(text_size(12.))
                         .color(colors::fg_secondary()),
                 ),
         );
-
-        if !*ready.read() {
-            content = content.child(
-                label()
-                    .text("Connecting to Orange...")
-                    .font_size(text_size(13.))
-                    .color(colors::fg_secondary()),
-            );
-            return ScrollView::new()
-                .width(Size::fill())
-                .height(Size::fill())
-                .show_scrollbar(true)
-                .child(content)
-                .into_element();
-        }
 
         if let Some(active) = signed_in {
             let token = active.access_token.clone();
@@ -125,11 +77,11 @@ impl Component for OrangeSocialPanel {
                         let _ = orange_api::logout(&token).await;
                         orange_api::clear_saved_session().await;
                         session.set(None);
-                        message.set(Some("Signed out of Orange.".to_string()));
+                        message.set(Some("Disconnected from Orange Friends.".to_string()));
                         busy.set(false);
                     });
                 })
-                .text("Sign out");
+                .text("Disconnect");
 
             content = content.child(
                 rect()
@@ -442,112 +394,92 @@ impl Component for OrangeSocialPanel {
                 }
                 content = content.child(results);
             }
-        } else {
-            content = content.child(
-                rect()
-                    .horizontal()
-                    .width(Size::fill())
-                    .spacing(6.)
-                    .child(
-                        Button::new()
-                            .variant(if !*registering.read() { ButtonVariant::Primary } else { ButtonVariant::Ghost })
-                            .size(ButtonSize::Small)
-                            .on_press(move |_| registering.set(false))
-                            .text("Sign in"),
-                    )
-                    .child(
-                        Button::new()
-                            .variant(if *registering.read() { ButtonVariant::Primary } else { ButtonVariant::Ghost })
-                            .size(ButtonSize::Small)
-                            .on_press(move |_| registering.set(true))
-                            .text("Create account"),
-                    ),
-            );
-
-            content = content
-                .child(
-                    TextInput::new(username)
-                        .width(Size::fill())
-                        .height(Size::px(38.))
+        } else if let Some(account) = minecraft_account {
+            if account.is_microsoft() && !account.needs_sign_in() && !account.access_token.is_empty() {
+                content = content.child(
+                    label()
+                        .text(format!("Signed into Minecraft as {}", account.username))
                         .font_size(text_size(13.))
-                        .placeholder("Orange username"),
-                )
-                .child(
-                    TextInput::new(password)
-                        .mode(InputMode::new_password())
-                        .width(Size::fill())
-                        .height(Size::px(38.))
-                        .font_size(text_size(13.))
-                        .placeholder("Password (10–128 characters)"),
+                        .color(colors::success()),
+                );
+                content = content.child(
+                    label()
+                        .text("Use your existing Microsoft sign-in. No separate Orange account or password is needed.")
+                        .font_size(text_size(11.))
+                        .color(colors::fg_secondary()),
                 );
 
-            let mut auth_username = username;
-            let mut auth_password = password;
-            let mut auth_registering = registering;
-            let mut auth_session = session;
-            let mut auth_ready = ready;
-            let mut auth_friends = friends;
-            let mut auth_incoming = incoming;
-            let mut auth_message = message;
-            let mut auth_busy = busy;
-            let button_label = if *registering.read() { "Create Orange account" } else { "Sign in to Orange" };
-            content = content.child(
-                Button::new()
-                    .primary()
-                    .size(ButtonSize::Large)
-                    .width(Size::fill())
-                    .disabled(*busy.read())
-                    .on_press(move |_| {
-                        let name = auth_username.read().trim().to_string();
-                        let pass = auth_password.read().clone();
-                        let is_register = *auth_registering.read();
-                        let mut session = auth_session;
-                        let mut ready = auth_ready;
-                        let mut friends = auth_friends;
-                        let mut incoming = auth_incoming;
-                        let mut message = auth_message;
-                        let mut busy = auth_busy;
-                        spawn_global(async move {
-                            if name.len() < 3 || name.len() > 16 {
-                                message.set(Some("Username must be 3–16 characters.".to_string()));
-                                return;
-                            }
-                            if pass.len() < 10 || pass.len() > 128 {
-                                message.set(Some("Password must be 10–128 characters.".to_string()));
-                                return;
-                            }
-                            busy.set(true);
-                            let result = if is_register {
-                                orange_api::register(&name, &pass).await
-                            } else {
-                                orange_api::login(&name, &pass).await
-                            };
-                            match result {
-                                Ok(auth) => {
-                                    let token = auth.access_token.clone();
-                                    let save_error = orange_api::save_session(&auth).await.err();
-                                    session.set(Some(auth));
-                                    let (friend_result, request_result) = tokio::join!(
-                                        orange_api::friends(&token),
-                                        orange_api::incoming_requests(&token)
-                                    );
-                                    if let Ok(value) = friend_result { friends.set(value); }
-                                    if let Ok(value) = request_result { incoming.set(value); }
-                                    message.set(save_error.or_else(|| Some("Welcome to Orange Client!".to_string())));
-                                    ready.set(true);
-                                }
-                                Err(error) => message.set(Some(error)),
-                            }
-                            busy.set(false);
-                        });
-                    })
-                    .text(button_label),
-            );
+                let account_id = account.id;
+                let mut connect_session = session;
+                let mut connect_friends = friends;
+                let mut connect_requests = incoming;
+                let mut connect_message = message;
+                let mut connect_busy = busy;
+                content = content.child(
+                    Button::new()
+                        .primary()
+                        .size(ButtonSize::Large)
+                        .width(Size::fill())
+                        .disabled(*busy.read())
+                        .on_press(move |_| {
+                            let mut session = connect_session;
+                            let mut friends = connect_friends;
+                            let mut requests = connect_requests;
+                            let mut message = connect_message;
+                            let mut busy = connect_busy;
+                            spawn_global(async move {
+                                busy.set(true);
+                                let refreshed = match crate::launcher::state() {
+                                    Ok(launcher) => launcher
+                                        .auth
+                                        .account_for_launch(account_id)
+                                        .await
+                                        .map_err(|error| error.to_string()),
+                                    Err(error) => Err(error.to_string()),
+                                };
 
+                                match refreshed {
+                                    Ok(minecraft) if minecraft.is_microsoft() && !minecraft.access_token.is_empty() => {
+                                        match orange_api::minecraft_login(&minecraft.access_token, account_id).await {
+                                            Ok(auth) => {
+                                                let token = auth.access_token.clone();
+                                                let save_error = orange_api::save_session(&auth).await.err();
+                                                session.set(Some(auth));
+                                                let (friend_result, request_result) = tokio::join!(
+                                                    orange_api::friends(&token),
+                                                    orange_api::incoming_requests(&token)
+                                                );
+                                                if let Ok(value) = friend_result { friends.set(value); }
+                                                if let Ok(value) = request_result { requests.set(value); }
+                                                message.set(save_error.or_else(|| Some(format!("Connected as {}.", minecraft.username))));
+                                            }
+                                            Err(error) => {
+                                                let message_text = error.strip_prefix("AUTH:").unwrap_or(&error).trim().to_string();
+                                                message.set(Some(message_text));
+                                            }
+                                        }
+                                    }
+                                    Ok(_) => message.set(Some("Your Microsoft sign-in has expired. Sign in again in Accounts.".to_string())),
+                                    Err(error) => message.set(Some(error)),
+                                }
+                                busy.set(false);
+                            });
+                        })
+                        .text("Connect Orange Friends"),
+                );
+            } else {
+                content = content.child(
+                    label()
+                        .text("Sign in with a Microsoft Minecraft account to add friends. Offline accounts cannot use Orange Friends.")
+                        .font_size(text_size(12.))
+                        .color(colors::fg_secondary()),
+                );
+            }
+        } else {
             content = content.child(
                 label()
-                    .text("Orange accounts are separate from your Microsoft Minecraft account.")
-                    .font_size(text_size(11.))
+                    .text("Sign in with Microsoft in the launcher's Accounts section to use Orange Friends. You do not need to create an Orange account.")
+                    .font_size(text_size(12.))
                     .color(colors::fg_secondary()),
             );
         }
