@@ -5,8 +5,8 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
 use axum::{
-    body::{Body, Bytes},
     Extension, Json, Router,
+    body::{Body, Bytes},
     extract::{DefaultBodyLimit, Path, Query, Request, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     middleware::{self, Next},
@@ -55,11 +55,17 @@ impl ApiError {
     }
 
     fn minecraft_unauthorized() -> Self {
-        Self(StatusCode::UNAUTHORIZED, "Minecraft session is invalid or expired; sign in again")
+        Self(
+            StatusCode::UNAUTHORIZED,
+            "Minecraft session is invalid or expired; sign in again",
+        )
     }
 
     fn bad_gateway() -> Self {
-        Self(StatusCode::BAD_GATEWAY, "could not verify the Minecraft profile; try again")
+        Self(
+            StatusCode::BAD_GATEWAY,
+            "could not verify the Minecraft profile; try again",
+        )
     }
 
     fn not_found(message: &'static str) -> Self {
@@ -380,9 +386,7 @@ async fn minecraft_login(
         .await
         .map_err(|_| ApiError::bad_gateway())?;
 
-    if response.status() == StatusCode::UNAUTHORIZED
-        || response.status() == StatusCode::FORBIDDEN
-    {
+    if response.status() == StatusCode::UNAUTHORIZED || response.status() == StatusCode::FORBIDDEN {
         return Err(ApiError::minecraft_unauthorized());
     }
     if !response.status().is_success() {
@@ -396,8 +400,8 @@ async fn minecraft_login(
     if !valid_username(&profile.name) {
         return Err(ApiError::minecraft_unauthorized());
     }
-    let minecraft_uuid = Uuid::parse_str(&profile.id)
-        .map_err(|_| ApiError::minecraft_unauthorized())?;
+    let minecraft_uuid =
+        Uuid::parse_str(&profile.id).map_err(|_| ApiError::minecraft_unauthorized())?;
     let username_normalized = profile.name.to_ascii_lowercase();
 
     // A name collision with a legacy password-based Orange account must not
@@ -817,16 +821,15 @@ async fn upload_cape(
 
     validate_cape_png(&body)?;
 
-    let minecraft_uuid = sqlx::query_scalar::<_, Option<Uuid>>(
-        "SELECT minecraft_uuid FROM users WHERE id = $1",
-    )
-    .bind(auth.user_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .flatten()
-    .ok_or(ApiError::conflict(
-        "sign in with a verified Microsoft Minecraft account before publishing a cape",
-    ))?;
+    let minecraft_uuid =
+        sqlx::query_scalar::<_, Option<Uuid>>("SELECT minecraft_uuid FROM users WHERE id = $1")
+            .bind(auth.user_id)
+            .fetch_optional(&state.pool)
+            .await?
+            .flatten()
+            .ok_or(ApiError::conflict(
+                "sign in with a verified Microsoft Minecraft account before publishing a cape",
+            ))?;
 
     // user_id is the primary key, so another upload replaces this player's current cape.
     let updated_at = sqlx::query_scalar::<_, DateTime<Utc>>(
@@ -877,7 +880,9 @@ async fn get_public_cape(
     .bind(minecraft_uuid)
     .fetch_optional(&state.pool)
     .await?
-    .ok_or(ApiError::not_found("this Minecraft player has no published Orange cape"))?;
+    .ok_or(ApiError::not_found(
+        "this Minecraft player has no published Orange cape",
+    ))?;
 
     Response::builder()
         .status(StatusCode::OK)
@@ -890,7 +895,9 @@ async fn get_public_cape(
 /// Validate the PNG container and fully decode the small cape texture before storing it.
 fn validate_cape_png(data: &[u8]) -> ApiResult<()> {
     if data.is_empty() || data.len() > MAX_CAPE_BYTES {
-        return Err(ApiError::bad_request("cape PNG must be smaller than 256 KiB"));
+        return Err(ApiError::bad_request(
+            "cape PNG must be smaller than 256 KiB",
+        ));
     }
 
     let decoder = png::Decoder::new(std::io::Cursor::new(data));
