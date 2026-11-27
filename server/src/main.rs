@@ -955,9 +955,7 @@ async fn delete_my_cape(
 
 /// Public list of recently published community capes. Only verified Minecraft accounts
 /// can publish, and the database enforces one cape per linked account.
-async fn list_public_capes(
-    State(state): State<AppState>,
-) -> ApiResult<Json<CapeListResponse>> {
+async fn list_public_capes(State(state): State<AppState>) -> ApiResult<Json<CapeListResponse>> {
     let rows = sqlx::query_as::<_, (Uuid, String, DateTime<Utc>)>(
         "SELECT users.minecraft_uuid, users.username, capes.updated_at
          FROM capes
@@ -1057,9 +1055,7 @@ fn validate_cape_png(data: &[u8]) -> ApiResult<()> {
         ));
     }
     if contains_apng_chunks(data) {
-        return Err(ApiError::bad_request(
-            "animated PNG capes are not allowed",
-        ));
+        return Err(ApiError::bad_request("animated PNG capes are not allowed"));
     }
 
     let decoder = png::Decoder::new(std::io::Cursor::new(data));
