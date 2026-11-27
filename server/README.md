@@ -62,10 +62,14 @@ All endpoints use JSON except where noted.
 | PUT | `/v1/capes/me` | Publish or replace the player's single cape |
 | DELETE | `/v1/capes/me` | Unpublish the player's cape |
 | GET | `/v1/capes/player/{minecraft_uuid}` | Public PNG texture for a Minecraft player |
+| POST | `/v1/client/heartbeat` | Mark the authenticated linked account as using Orange Client |
+| GET | `/v1/client/presence?uuids=...` | Return the listed UUIDs with a recent Orange Client heartbeat |
 
 For protected routes send `Authorization: Bearer ACCESS_TOKEN`. Registration and login accept `{"username":"Example","password":"a-long-password"}`.
 
 Cape publishing requires a session created by `POST /v1/auth/minecraft`, which verifies the current Microsoft/Minecraft account. Send the PNG file itself as the raw request body with `Content-Type: image/png`; accepted images must be exactly **64×32 pixels** and no larger than **256 KiB**. A `PUT` replaces that player's one existing cape instead of creating another. The API returns a versioned `texture_url` from `GET /v1/capes/me`; other players can fetch it by Minecraft UUID. Publishing, replacing and downloading capes are free.
+
+The launcher/mod presence endpoints use the Orange bearer token from the verified Microsoft sign-in flow. The client should send a heartbeat about every 30 seconds; the server treats accounts as active for **90 seconds** after the last heartbeat. Presence lookup accepts 1–80 comma-separated Minecraft UUIDs and returns only matching, recently active Orange Client users. This is a lightweight status signal, not a chat or social messaging service.
 
 ## Before public deployment
 
