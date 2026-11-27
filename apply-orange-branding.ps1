@@ -654,6 +654,79 @@ Replace-SourceText "packages/oneclient_app/src/view/chat/window.rs" 'pub fn chat
 }'
 
 
+
+# Stop converting shared Poly+ websocket traffic into the old OneClient ChatEvent API.
+# The same socket carries Party packets, which remain supported; chat packets are ignored.
+Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" 'use oneclient_events::EventBus;' 'use oneclient_events::EventBus;'
+Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" '    events: EventBus,
+' ''
+Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" @'
+    pub fn events(&self) -> &EventBus {
+        &self.events
+    }
+
+'@ ''
+Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" '    fn new(auth: Arc<oneclient_auth::AuthService>, events: EventBus) -> Self {' '    fn new(auth: Arc<oneclient_auth::AuthService>) -> Self {'
+Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" '            events,
+' ''
+Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" 'Arc::new(PlusClient::new(auth, events))' 'Arc::new(PlusClient::new(auth))'
+
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" 'use oneclient_events::{ChatEvent, EventBus};' ''
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" @'
+    if connected {
+        client
+            .events
+            .chat(ChatEvent::ConnectionChanged { connected: false });
+    }
+
+'@ ''
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" @'
+    client
+        .events
+        .chat(ChatEvent::ConnectionChanged { connected: true });
+'@ ''
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" @'
+    pump(
+        &mut websocket,
+        &client.events,
+        PING_INTERVAL,
+'@ @'
+    pump(
+        &mut websocket,
+        PING_INTERVAL,
+'@
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" @'
+async fn pump<F, Fut>(
+    websocket: &mut reqwest_websocket::WebSocket,
+    events: &EventBus,
+    ping_interval: Duration,
+'@ @'
+async fn pump<F, Fut>(
+    websocket: &mut reqwest_websocket::WebSocket,
+    ping_interval: Duration,
+'@
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" '                dispatch(events, account_id, &payload);
+' ''
+
+
+$plusSessionPath = Get-SourceFile "packages/oneclient_polyplus/src/session.rs"
+$plusSessionText = [System.IO.File]::ReadAllText($plusSessionPath)
+$chatDispatchPattern = '(?s)fn dispatch\(events: &EventBus, account: Uuid, payload: &str\) \{.*?\n\}\n\n(?=pub\(crate\) async fn current_account)'
+$chatDispatchMatches = [regex]::Matches($plusSessionText, $chatDispatchPattern)
+if ($chatDispatchMatches.Count -gt 0) {
+    $plusSessionText = [regex]::Replace($plusSessionText, $chatDispatchPattern, '', 1)
+    [System.IO.File]::WriteAllText($plusSessionPath, $plusSessionText, $utf8)
+    Write-Host "Orange Client: removed the OneClient Chat websocket packet dispatcher."
+}
+$plusSessionVerify = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_polyplus/src/session.rs"))
+$plusPolyplusVerify = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_polyplus/src/lib.rs"))
+if ($plusSessionVerify.Contains("ChatEvent::") -or $plusSessionVerify.Contains("events.chat(") -or $plusSessionVerify.Contains("dispatch(events, account_id")) {
+    throw "Orange Client verification failed: Poly+ websocket still dispatches OneClient Chat packets."
+}
+if ($plusPolyplusVerify.Contains("events: EventBus") -or $plusPolyplusVerify.Contains("self.events")) {
+    throw "Orange Client verification failed: Poly+ client still holds the old chat event bus."
+}
+
 # Verify the resulting visible branding before compiling.
 $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_APP_ID: &str = "com.orangeclient.launcher"' },
