@@ -808,7 +808,11 @@ async fn client_presence(
     State(state): State<AppState>,
     Query(query): Query<PresenceQuery>,
 ) -> ApiResult<Json<PresenceResponse>> {
-    let raw: Vec<&str> = query.uuids.split(',').filter(|value| !value.is_empty()).collect();
+    let raw: Vec<&str> = query
+        .uuids
+        .split(',')
+        .filter(|value| !value.is_empty())
+        .collect();
     if raw.is_empty() || raw.len() > 80 {
         return Err(ApiError::bad_request(
             "presence lookup must contain between 1 and 80 UUIDs",
