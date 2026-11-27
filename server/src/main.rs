@@ -1011,11 +1011,54 @@ async fn get_public_cape(
         .map_err(|_| ApiError::internal())
 }
 
+/// Detect APNG animation-control chunks before decoding. The PNG crate decodes
+/// static frames, so we must reject APNG explicitly rather than silently accepting
+/// only its first frame.
+fn contains_apng_chunks(data: &[u8]) -> bool {
+    if !data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return false;
+    }
+
+    let mut offset = 8_usize;
+    while offset.checked_add(12).is_some_and(|end| end <= data.len()) {
+        let length = u32::from_be_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]) as usize;
+        let Some(chunk_end) = offset
+            .checked_add(12)
+            .and_then(|start| start.checked_add(length))
+        else {
+            return false;
+        };
+        if chunk_end > data.len() {
+            return false;
+        }
+
+        let chunk_type = &data[offset + 4..offset + 8];
+        if chunk_type == b"acTL" || chunk_type == b"fcTL" || chunk_type == b"fdAT" {
+            return true;
+        }
+        if chunk_type == b"IEND" {
+            return false;
+        }
+        offset = chunk_end;
+    }
+    false
+}
+
 /// Validate the PNG container and fully decode the small cape texture before storing it.
 fn validate_cape_png(data: &[u8]) -> ApiResult<()> {
     if data.is_empty() || data.len() > MAX_CAPE_BYTES {
         return Err(ApiError::bad_request(
             "cape PNG must be smaller than 256 KiB",
+        ));
+    }
+    if contains_apng_chunks(data) {
+        return Err(ApiError::bad_request(
+            "animated PNG capes are not allowed",
         ));
     }
 
