@@ -33,6 +33,19 @@ pub struct OrangeFriendRequest {
     pub created_at: String,
 }
 
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
+pub struct OrangeCape {
+    pub minecraft_uuid: Uuid,
+    pub username: String,
+    pub updated_at: String,
+    pub texture_url: String,
+}
+
+#[derive(Deserialize)]
+struct PublicCapesResponse {
+    capes: Vec<OrangeCape>,
+}
+
 #[derive(Deserialize)]
 struct AuthResponse {
     access_token: String,
@@ -173,6 +186,54 @@ pub async fn me(token: &str) -> Result<OrangeUser, String> {
         .await
         .map_err(|_| "Could not reach the Orange server.".to_string())?;
     decode_response(response).await
+}
+
+/// Lists public Orange community capes from the existing Orange server.
+pub async fn community_capes() -> Result<Vec<OrangeCape>, String> {
+    let response = HTTP
+        .get(api_url("/v1/capes"))
+        .send()
+        .await
+        .map_err(|_| "Could not reach the Orange cape server.".to_string())?;
+    let result: PublicCapesResponse = decode_response(response).await?;
+    Ok(result.capes)
+}
+
+/// Downloads a cape texture from the API-provided relative path. The path is
+/// restricted to the public cape route to prevent arbitrary URL fetching.
+pub async fn download_cape_texture(texture_path: &str) -> Result<Vec<u8>, String> {
+    if !texture_path.starts_with("/v1/capes/player/") || texture_path.contains("..") {
+        return Err("The Orange server returned an invalid cape texture path.".to_string());
+    }
+    let response = HTTP
+        .get(api_url(texture_path))
+        .send()
+        .await
+        .map_err(|_| "Could not download this Orange cape.".to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("The Orange cape server returned HTTP {}.", response.status()));
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|_| "Could not read the Orange cape image.".to_string())?;
+    if bytes.is_empty() || bytes.len() > 256 * 1024 {
+        return Err("The Orange cape image is empty or larger than 256 KiB.".to_string());
+    }
+    Ok(bytes.to_vec())
+}
+
+/// Publishes or replaces the current verified Minecraft account's single cape.
+pub async fn publish_cape(token: &str, png: Vec<u8>) -> Result<(), String> {
+    let response = HTTP
+        .put(api_url("/v1/capes/me"))
+        .bearer_auth(token)
+        .header(reqwest::header::CONTENT_TYPE, "image/png")
+        .body(png)
+        .send()
+        .await
+        .map_err(|_| "Could not reach the Orange cape server.".to_string())?;
+    check_response(response).await
 }
 
 pub async fn friends(token: &str) -> Result<Vec<OrangeUser>, String> {
