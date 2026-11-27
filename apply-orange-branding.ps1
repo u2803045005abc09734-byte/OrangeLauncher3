@@ -750,6 +750,10 @@ if (-not $plusSessionVerify.Contains("party::dispatch(&payload)")) {
 # Keep Orange Friends and the independent Party system, but remove the old OneClient Chat UI modules.
 Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use crate::components::{OVERLAY_BASE_LEVEL, OverlayPopup, popup_surface, use_popup_intro};' 'use crate::components::{OverlayPopup, popup_surface, use_popup_intro};'
 Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use crate::hooks::{use_dispatch, use_social_open, use_social_popped_notice};' 'use crate::hooks::{use_dispatch, use_social_open};'
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" '        let open = use_social_open();
+        let dispatch = use_dispatch();
+' '        let open = use_social_open();
+'
 Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use crate::i18n::t;' ''
 Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use crate::theme::{self, colors, rounded, text_size};' 'use crate::theme;'
 Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use super::common::{ROW_RADIUS_PX, inset_border};
