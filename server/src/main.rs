@@ -119,6 +119,11 @@ struct UserSearch {
 }
 
 #[derive(Deserialize)]
+struct PresenceQuery {
+    uuids: String,
+}
+
+#[derive(Deserialize)]
 struct MinecraftProfile {
     id: String,
     name: String,
@@ -163,6 +168,11 @@ struct CapeInfo {
     published: bool,
     updated_at: Option<DateTime<Utc>>,
     texture_url: Option<String>,
+}
+
+#[derive(Serialize)]
+struct PresenceResponse {
+    online_uuids: Vec<Uuid>,
 }
 
 #[tokio::main]
@@ -218,6 +228,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             post(reject_friend_request),
         )
         .route("/v1/friends/{friend_id}", delete(remove_friend))
+        .route("/v1/client/heartbeat", post(client_heartbeat))
         .route(
             "/v1/capes/me",
             get(get_my_cape).put(upload_cape).delete(delete_my_cape),
@@ -245,6 +256,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/auth/register", post(register))
         .route("/v1/auth/login", post(login))
         .route("/v1/auth/minecraft", post(minecraft_login))
+        .route("/v1/client/presence", get(client_presence))
         .route("/v1/capes/player/{minecraft_uuid}", get(get_public_cape))
         .merge(protected_routes)
         .with_state(state)
@@ -767,6 +779,63 @@ async fn remove_friend(
         return Err(ApiError::not_found("friendship not found"));
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Mark the authenticated, Minecraft-linked player as using Orange Client.
+async fn client_heartbeat(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<StatusCode> {
+    let updated = sqlx::query(
+        "UPDATE users
+         SET client_seen_at = now()
+         WHERE id = $1 AND minecraft_uuid IS NOT NULL",
+    )
+    .bind(auth.user_id)
+    .execute(&state.pool)
+    .await?;
+
+    if updated.rows_affected() == 0 {
+        return Err(ApiError::conflict(
+            "link a verified Minecraft account before publishing Orange Client presence",
+        ));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Returns only the supplied Minecraft UUIDs that sent an Orange heartbeat recently.
+async fn client_presence(
+    State(state): State<AppState>,
+    Query(query): Query<PresenceQuery>,
+) -> ApiResult<Json<PresenceResponse>> {
+    let raw: Vec<&str> = query.uuids.split(',').filter(|value| !value.is_empty()).collect();
+    if raw.is_empty() || raw.len() > 80 {
+        return Err(ApiError::bad_request(
+            "presence lookup must contain between 1 and 80 UUIDs",
+        ));
+    }
+
+    let mut uuids = Vec::with_capacity(raw.len());
+    for value in raw {
+        uuids.push(
+            Uuid::parse_str(value)
+                .map_err(|_| ApiError::bad_request("presence lookup contains an invalid UUID"))?,
+        );
+    }
+    uuids.sort_unstable();
+    uuids.dedup();
+
+    let online_uuids = sqlx::query_scalar::<_, Uuid>(
+        "SELECT minecraft_uuid
+         FROM users
+         WHERE minecraft_uuid = ANY($1)
+           AND client_seen_at > now() - interval '90 seconds'",
+    )
+    .bind(uuids)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(PresenceResponse { online_uuids }))
 }
 
 async fn get_my_cape(
