@@ -813,6 +813,28 @@ pub fn open_chat_window() {}
 Write-Host "Orange Client: detached the old Chat UI modules; Orange Friends and Party remain."
 
 
+# Install Orange Client's own bundle (our mod instead of PolyPlus/OneConfig) from the mod repository's rolling release.
+Replace-SourceText "packages/oneclient_content/src/bundles/manager.rs" 'format!("{}{}", ctx.net.config().meta_url_base, entry.remote_path)' 'format!("{}{}", oneclient_common::constants::ORANGE_BUNDLES_URL, entry.remote_path)'
+Replace-SourceText "packages/oneclient_content/src/bundles/manager.rs" @'
+        let url = format!(
+            "{}/oneclient/bundles/{channel}/metadata.json",
+            config.meta_url_base
+        );
+'@ @'
+        let _ = channel;
+        let url = format!(
+            "{}/metadata.json",
+            oneclient_common::constants::ORANGE_BUNDLES_URL
+        );
+'@
+$bundleManager = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_content/src/bundles/manager.rs"))
+if (([regex]::Matches($bundleManager, "ORANGE_BUNDLES_URL")).Count -lt 2) {
+    throw "Orange branding verification failed: bundle manager is not pointed at the Orange bundle release."
+}
+if ($bundleManager.Contains("config.meta_url_base")) {
+    throw "Orange branding verification failed: bundle manager still reads Polyfrost bundles."
+}
+
 # Verify the resulting visible branding before compiling.
 $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_APP_ID: &str = "com.orangeclient.launcher"' },

@@ -18,6 +18,12 @@ pub const DISCORD_CLIENT_ID: &str = match option_env!("ORANGE_CLIENT_DISCORD_CLI
     None => "",
 };
 
+// Orange Client's own launcher bundle (mod jar + Fabric API + performance mods) is published as a
+// rolling GitHub release by the mod repository. The launcher installs this instead of Polyfrost's
+// OneClient bundles, so the closed-source PolyPlus/OneConfig mods are no longer installed.
+pub const ORANGE_BUNDLES_URL: &str =
+    "https://github.com/u2803045005abc09734-byte/orange-client-2.02/releases/download/bundle-latest";
+
 pub const MODRINTH_API_URL: &str = "https://api.modrinth.com";
 pub const MODRINTH_CDN_PREFIX: &str = "https://cdn.modrinth.com/data/";
 pub const CURSEFORGE_API_URL: &str = "https://api.curseforge.com/v1";
