@@ -354,9 +354,22 @@ Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" 
 Replace-SourceText "packages/oneclient_discord/src/lib.rs" 'const LARGE_IMAGE: &str = "onelauncher_logo_512";' 'const LARGE_IMAGE: &str = "orange_client_logo";'
 Replace-SourceText "packages/oneclient_discord/src/lib.rs" '"Playing Minecraft"' '"Playing Minecraft with Orange Client"'
 Replace-SourceText "packages/oneclient_discord/src/lib.rs" '.large_text("OneClient")' '.large_text("Orange Client")'
-# Replace the individual Discord link fragments so harmless formatting changes cannot skip the branding.
-Replace-SourceText "packages/oneclient_discord/src/lib.rs" '"https://polyfrost.org/"' '"https://github.com/u2803045005abc09734-byte/OrangeLauncher3"'
-Replace-SourceText "packages/oneclient_discord/src/lib.rs" '"Website"' '"Orange Client"'
+# Normalize the actual Discord website button after the pinned source patch.
+# Upstream revisions may change the button label or destination, so match its Rust structure.
+$discordPath = Get-SourceFile "packages/oneclient_discord/src/lib.rs"
+$discordText = [System.IO.File]::ReadAllText($discordPath)
+$discordButtonPattern = 'Button::new\(\s*"[^"]*"\s*,\s*"[^"]*"\s*\)'
+$discordButtonMatches = [regex]::Matches($discordText, $discordButtonPattern)
+if ($discordButtonMatches.Count -lt 1) {
+    throw "Orange branding: no Discord Rich Presence Button::new(...) call was found."
+}
+$discordButtonReplacement = 'Button::new("Orange Client", "https://github.com/u2803045005abc09734-byte/OrangeLauncher3")'
+$discordText = [regex]::Replace($discordText, $discordButtonPattern, $discordButtonReplacement, 1)
+# Also remove any remaining visible Polyfrost destination in the Discord integration.
+$discordText = [regex]::Replace($discordText, 'https?://(?:www\.)?polyfrost\.org/?', 'https://github.com/u2803045005abc09734-byte/OrangeLauncher3', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+[System.IO.File]::WriteAllText($discordPath, $discordText, $utf8)
+Write-Host "Orange branding: normalized $($discordButtonMatches.Count) Discord Rich Presence button(s)."
+
 
 # Verify the resulting visible branding before compiling.
 $checks = @(
@@ -365,8 +378,7 @@ $checks = @(
     @{ Path = "packages/oneclient_app/src/theme/mod.rs"; Text = '.text("ORANGECLIENT")' },
     @{ Path = "packages/oneclient_app/src/theme/mod.rs"; Text = '"icons/pixel/icon-logo.svg"' },
     @{ Path = "packages/oneclient_discord/src/lib.rs"; Text = '.large_text("Orange Client")' },
-    @{ Path = "packages/oneclient_discord/src/lib.rs"; Text = '"https://github.com/u2803045005abc09734-byte/OrangeLauncher3"' },
-    @{ Path = "packages/oneclient_discord/src/lib.rs"; Text = '"Orange Client"' },
+    @{ Path = "packages/oneclient_discord/src/lib.rs"; Text = 'Button::new("Orange Client", "https://github.com/u2803045005abc09734-byte/OrangeLauncher3")' },
     @{ Path = "packages/oneclient_common/src/constants.rs"; Text = '"Orange Client v"' },
     @{ Path = "packages/oneclient_app/Cargo.toml"; Text = "reqwest.workspace = true" },
     @{ Path = "packages/oneclient_app/src/lib.rs"; Text = "mod orange_api;" },
@@ -381,6 +393,10 @@ $checks = @(
 $navbarText = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/components/navbar/app_navbar.rs"))
 if ($navbarText.Contains("Route::Wardrobe")) {
     throw "Orange branding verification failed: the Wardrobe navigation entry is still present."
+}
+$discordVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_discord/src/lib.rs"))
+if ($discordVerification -match '(?i)https?://(?:www\.)?polyfrost\.org') {
+    throw "Orange branding verification failed: a Polyfrost destination remains in Discord Rich Presence."
 }
 foreach ($check in $checks) {
     $content = [System.IO.File]::ReadAllText((Get-SourceFile $check.Path))
