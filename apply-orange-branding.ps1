@@ -290,6 +290,23 @@ Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" 
             )
 '@
 
+# Orange Client has no Wardrobe/Marketplace: remove the Wardrobe entry from the launcher navigation.
+Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" @'
+
+        .child(NavLink {
+            active: route == Route::Wardrobe {},
+            target: NavTarget::Route(Route::Wardrobe {}),
+            nav_label: t("oneclient.components.navbar.wardrobe"),
+            over_art,
+        })
+'@ ''
+
+# Discord Rich Presence: use the Orange Client asset key. The application name and its
+# uploaded assets come from the Discord application whose ID is set in the
+# ORANGE_CLIENT_DISCORD_CLIENT_ID GitHub secret (create it with the name "Orange Client").
+Replace-SourceText "packages/oneclient_discord/src/lib.rs" 'const LARGE_IMAGE: &str = "onelauncher_logo_512";' 'const LARGE_IMAGE: &str = "orange_client_logo";'
+Replace-SourceText "packages/oneclient_discord/src/lib.rs" '"Playing Minecraft"' '"Playing Minecraft with Orange Client"'
+
 # Verify the resulting visible branding before compiling.
 $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_APP_ID: &str = "com.orangeclient.launcher"' },
@@ -306,6 +323,10 @@ $checks = @(
     @{ Path = "packages/oneclient_app/assets/themes/minecraft-dark.json"; Text = '"accent": "#FF7A18"' },
     @{ Path = "packages/oneclient_core/src/settings/launcher.rs"; Text = 'theme: "minecraft-dark".to_string()' }
 )
+$navbarText = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/components/navbar/app_navbar.rs"))
+if ($navbarText.Contains("Route::Wardrobe")) {
+    throw "Orange branding verification failed: the Wardrobe navigation entry is still present."
+}
 foreach ($check in $checks) {
     $content = [System.IO.File]::ReadAllText((Get-SourceFile $check.Path))
     if (-not $content.Contains($check.Text)) {
