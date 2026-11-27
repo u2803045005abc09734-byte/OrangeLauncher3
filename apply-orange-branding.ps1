@@ -167,26 +167,72 @@ if cfg!(debug_assertions) {
             }
 '@
 
-# Replace the upstream wordmark and its licensed logo mark with original Orange Client branding.
-Replace-SourceText "packages/oneclient_app/src/theme/mod.rs" '.text("ONECLIENT")' '.text("ORANGE CLIENT")'
-# The launcher-level status/version label lives in oneclient_common, not the app translation files.
-Replace-SourceText "packages/oneclient_common/src/constants.rs" '"OneClient v"' '"Orange Client v"'
-$logo = Get-SourceFile "packages/oneclient_app/assets/logo.svg"
-$logoSvg = @'
-<svg width="200" height="32" viewBox="0 0 200 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <text x="0" y="24" fill="currentColor" font-family="Poppins, Arial, sans-serif" font-size="21" font-weight="800" letter-spacing="0.4">ORANGE CLIENT</text>
-</svg>
-'@
-[System.IO.File]::WriteAllText($logo, $logoSvg, $utf8)
-
-# Orange Client logo mark (white Orange slice, user-supplied): replace the old Polyfrost/OneClient logo wherever
-# the launcher UI or secondary-window icon loads it.
+# Use the white Orange mark next to the OrangeClient wordmark throughout the launcher.
 $orangeMarkPath = Join-Path $PSScriptRoot "branding/orange-logo-mark.svg"
 if (-not (Test-Path -LiteralPath $orangeMarkPath -PathType Leaf)) {
     throw "Missing vector Orange Client logo mark: $orangeMarkPath"
 }
-# Single-color vector trace of the user's white Orange logo (fill=currentColor), so the launcher can tint it per theme.
 $orangeMark = [System.IO.File]::ReadAllText($orangeMarkPath)
+$markBodyMatch = [regex]::Match($orangeMark, '(?s)<svg\b[^>]*>(?<body>.*?)</svg>')
+if (-not $markBodyMatch.Success) {
+    throw "The Orange Client vector mark is not a valid SVG document."
+}
+$orangeMarkBody = $markBodyMatch.Groups["body"].Value
+
+# The pixel-icon wordmark branch also gets the white mark, instead of text alone.
+$oldPixelWordmark = @'
+if colors::active_theme().pixel_icons {
+        return label()
+            .text("ONECLIENT")
+            .font_family(font())
+            .font_weight(FontWeight::BOLD)
+            .font_size(text_size(height * 0.83))
+            .color(color)
+            .into_element();
+    }
+'@
+$newPixelWordmark = @'
+if colors::active_theme().pixel_icons {
+        return rect()
+            .horizontal()
+            .cross_align(Alignment::Center)
+            .spacing(7.)
+            .child(
+                SvgViewer::new((
+                    "icons/pixel/icon-logo.svg",
+                    AppAssets::get_bytes("icons/pixel/icon-logo.svg").unwrap_or_default(),
+                ))
+                .show_loader(false)
+                .width(Size::px(height))
+                .height(Size::px(height))
+                .color(color),
+            )
+            .child(
+                label()
+                    .text("ORANGECLIENT")
+                    .font_family(font())
+                    .font_weight(FontWeight::BOLD)
+                    .font_size(text_size(height * 0.83))
+                    .color(color),
+            )
+            .into_element();
+    }
+'@
+Replace-SourceText "packages/oneclient_app/src/theme/mod.rs" $oldPixelWordmark $newPixelWordmark
+
+# The non-pixel wordmark combines the white logo mark and OrangeClient text in one vector asset.
+$logo = Get-SourceFile "packages/oneclient_app/assets/logo.svg"
+$logoSvg = @"
+<svg width="250" height="32" viewBox="0 0 250 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="scale(0.03125)">
+$orangeMarkBody
+  </g>
+  <text x="42" y="23" fill="currentColor" font-family="Poppins, Arial, sans-serif" font-size="20" font-weight="800" letter-spacing="0.3">ORANGECLIENT</text>
+</svg>
+"@
+[System.IO.File]::WriteAllText($logo, $logoSvg, $utf8)
+
+# Replace the old mark in navigation and secondary-window icons with the same white Orange asset.
 $logoAssets = @(
     "packages/oneclient_app/assets/icons/icon-logo.svg",
     "packages/oneclient_app/assets/icons/pixel/icon-logo.svg",
@@ -200,16 +246,17 @@ foreach ($relativePath in $logoAssets) {
     }
 }
 
-# Keep the user's transparent white badge separate from the full-color Windows app icon.
-# The Windows icon pipeline consumes branding/orange-icon.png.b64; this white mark is
-# embedded as a distinct asset for the in-game player-list badge integration.
+# Keep the transparent white badge separate from the full-color Windows app icon.
 $whiteBadgeSource = Join-Path $PSScriptRoot "branding/orange-in-game-mark.png"
 if (-not (Test-Path -LiteralPath $whiteBadgeSource -PathType Leaf)) {
     throw "Missing transparent white Orange Client in-game mark: $whiteBadgeSource"
 }
 $whiteBadgePath = Join-Path $source "packages/oneclient_app/assets/orange-client-mark-white.png"
 Copy-Item -LiteralPath $whiteBadgeSource -Destination $whiteBadgePath -Force
-Write-Host "Orange branding: embedded the separate transparent white in-game badge asset."
+Write-Host "Orange branding: embedded the separate transparent white badge asset."
+
+# The launcher-level status/version label lives in oneclient_common, not the app translation files.
+Replace-SourceText "packages/oneclient_common/src/constants.rs" '"OneClient v"' '"Orange Client v"'
 Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" '.size(COMPACT_LOGO_PX)
                 .color(theme::colors::brand())' '.size(COMPACT_LOGO_PX)
                 .color(primary_color(over_art))'
@@ -306,12 +353,17 @@ Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" 
 # ORANGE_CLIENT_DISCORD_CLIENT_ID GitHub secret (create it with the name "Orange Client").
 Replace-SourceText "packages/oneclient_discord/src/lib.rs" 'const LARGE_IMAGE: &str = "onelauncher_logo_512";' 'const LARGE_IMAGE: &str = "orange_client_logo";'
 Replace-SourceText "packages/oneclient_discord/src/lib.rs" '"Playing Minecraft"' '"Playing Minecraft with Orange Client"'
+Replace-SourceText "packages/oneclient_discord/src/lib.rs" '.large_text("OneClient")' '.large_text("Orange Client")'
+Replace-SourceText "packages/oneclient_discord/src/lib.rs" '.buttons(vec![Button::new("Website", "https://polyfrost.org/")]);' '.buttons(vec![Button::new("Orange Client", "https://github.com/u2803045005abc09734-byte/OrangeLauncher3")]);'
 
 # Verify the resulting visible branding before compiling.
 $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_APP_ID: &str = "com.orangeclient.launcher"' },
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_TITLE: &str = "Orange Client"' },
-    @{ Path = "packages/oneclient_app/src/theme/mod.rs"; Text = '.text("ORANGE CLIENT")' },
+    @{ Path = "packages/oneclient_app/src/theme/mod.rs"; Text = '.text("ORANGECLIENT")' },
+    @{ Path = "packages/oneclient_app/src/theme/mod.rs"; Text = '"icons/pixel/icon-logo.svg"' },
+    @{ Path = "packages/oneclient_discord/src/lib.rs"; Text = '.large_text("Orange Client")' },
+    @{ Path = "packages/oneclient_discord/src/lib.rs"; Text = 'Button::new("Orange Client", "https://github.com/u2803045005abc09734-byte/OrangeLauncher3")' },
     @{ Path = "packages/oneclient_common/src/constants.rs"; Text = '"Orange Client v"' },
     @{ Path = "packages/oneclient_app/Cargo.toml"; Text = "reqwest.workspace = true" },
     @{ Path = "packages/oneclient_app/src/lib.rs"; Text = "mod orange_api;" },
