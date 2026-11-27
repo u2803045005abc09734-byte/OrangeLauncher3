@@ -364,7 +364,8 @@ if ($discordButtonMatches.Count -lt 1) {
     throw "Orange branding: no Discord Rich Presence Button::new(...) call was found."
 }
 $discordButtonReplacement = 'Button::new("Orange Client", "https://github.com/u2803045005abc09734-byte/OrangeLauncher3")'
-$discordText = [regex]::Replace($discordText, $discordButtonPattern, $discordButtonReplacement, 1)
+$discordButtonRegex = [regex]::new($discordButtonPattern)
+$discordText = $discordButtonRegex.Replace($discordText, $discordButtonReplacement, 1)
 # Also remove any remaining visible Polyfrost destination in the Discord integration.
 $discordText = [regex]::Replace($discordText, 'https?://(?:www\.)?polyfrost\.org/?', 'https://github.com/u2803045005abc09734-byte/OrangeLauncher3', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
 [System.IO.File]::WriteAllText($discordPath, $discordText, $utf8)
