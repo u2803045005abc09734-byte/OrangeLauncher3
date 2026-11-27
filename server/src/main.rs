@@ -171,6 +171,19 @@ struct CapeInfo {
 }
 
 #[derive(Serialize)]
+struct PublicCape {
+    minecraft_uuid: Uuid,
+    username: String,
+    updated_at: DateTime<Utc>,
+    texture_url: String,
+}
+
+#[derive(Serialize)]
+struct CapeListResponse {
+    capes: Vec<PublicCape>,
+}
+
+#[derive(Serialize)]
 struct PresenceResponse {
     online_uuids: Vec<Uuid>,
 }
@@ -257,6 +270,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/auth/login", post(login))
         .route("/v1/auth/minecraft", post(minecraft_login))
         .route("/v1/client/presence", get(client_presence))
+        .route("/v1/capes", get(list_public_capes))
         .route("/v1/capes/player/{minecraft_uuid}", get(get_public_cape))
         .merge(protected_routes)
         .with_state(state)
@@ -937,6 +951,38 @@ async fn delete_my_cape(
         .execute(&state.pool)
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Public list of recently published community capes. Only verified Minecraft accounts
+/// can publish, and the database enforces one cape per linked account.
+async fn list_public_capes(
+    State(state): State<AppState>,
+) -> ApiResult<Json<CapeListResponse>> {
+    let rows = sqlx::query_as::<_, (Uuid, String, DateTime<Utc>)>(
+        "SELECT users.minecraft_uuid, users.username, capes.updated_at
+         FROM capes
+         JOIN users ON users.id = capes.user_id
+         WHERE users.minecraft_uuid IS NOT NULL
+         ORDER BY capes.updated_at DESC
+         LIMIT 100",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let capes = rows
+        .into_iter()
+        .map(|(minecraft_uuid, username, updated_at)| PublicCape {
+            minecraft_uuid,
+            username,
+            updated_at,
+            texture_url: format!(
+                "/v1/capes/player/{minecraft_uuid}?v={}",
+                updated_at.timestamp_millis()
+            ),
+        })
+        .collect();
+
+    Ok(Json(CapeListResponse { capes }))
 }
 
 /// Public texture endpoint used by Orange Client players to fetch a published cape by UUID.
