@@ -660,6 +660,20 @@ Replace-SourceText "packages/oneclient_app/src/view/chat/window.rs" 'pub fn chat
 Replace-SourceText "packages/oneclient_polyplus/src/session.rs" 'use crate::packets::{ClientboundPacket, ServerboundPacket};' 'use crate::packets::ServerboundPacket;'
 
 Replace-SourceText "packages/oneclient_polyplus/src/session.rs" 'use oneclient_events::{ChatEvent, EventBus};' ''
+# The upstream unit tests for the removed ChatEvent dispatcher are obsolete; keep the Party/socket tests.
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" '        let (events, _receiver) = EventBus::channel();' ''
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" '        let (events, mut bus) = EventBus::channel();' ''
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" '                &events,' ''
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" '        assert!(bus.try_recv().is_err(), "party traffic stays off the chat bus");' ''
+$chatTestsPath = Get-SourceFile "packages/oneclient_polyplus/src/session.rs"
+$chatTestsText = [System.IO.File]::ReadAllText($chatTestsPath)
+$chatTestsPattern = '(?s)    #\[test\]\r?\n    fn group_messages_reach_the_bus\(\) \{.*?    #\[test\]\r?\n    fn cosmetic_traffic_stays_off_the_bus\(\) \{.*?\r?\n    \}\r?\n(?=\})'
+$chatTestsMatches = [regex]::Matches($chatTestsText, $chatTestsPattern)
+if ($chatTestsMatches.Count -gt 0) {
+    $chatTestsText = [regex]::Replace($chatTestsText, $chatTestsPattern, '', 1)
+    [System.IO.File]::WriteAllText($chatTestsPath, $chatTestsText, $utf8)
+    Write-Host "Orange Client: removed obsolete OneClient chat-dispatch tests; Party tests remain."
+}
 Replace-SourceText "packages/oneclient_polyplus/src/session.rs" @'
     if connected {
         client
@@ -707,8 +721,12 @@ if ($chatDispatchMatches.Count -gt 0) {
     Write-Host "Orange Client: removed the OneClient Chat websocket packet dispatcher."
 }
 $plusSessionVerify = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_polyplus/src/session.rs"))
-if ($plusSessionVerify.Contains("ChatEvent::") -or $plusSessionVerify.Contains("fn dispatch(events: &EventBus, account: Uuid")) {
+$plusSessionProduction = $plusSessionVerify.Split("#[cfg(test)]")[0]
+if ($plusSessionProduction.Contains("ChatEvent::") -or $plusSessionProduction.Contains("events.chat(") -or $plusSessionProduction.Contains("fn dispatch(")) {
     throw "Orange Client verification failed: Poly+ websocket still dispatches OneClient Chat packets."
+}
+if ($plusSessionVerify.Contains("fn group_messages_reach_the_bus") -or $plusSessionVerify.Contains("fn a_live_invite_keeps_its_id_and_status")) {
+    throw "Orange Client verification failed: legacy OneClient Chat dispatcher tests remain."
 }
 if (-not $plusSessionVerify.Contains("party::dispatch(&payload)")) {
     throw "Orange Client verification failed: the independent Party websocket dispatcher was removed."
