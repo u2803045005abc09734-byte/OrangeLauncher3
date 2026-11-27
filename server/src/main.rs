@@ -5,12 +5,13 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
 use axum::{
+    body::{Body, Bytes},
     Extension, Json, Router,
-    extract::{Path, Query, Request, State},
-    http::{HeaderValue, Method, StatusCode, header},
+    extract::{DefaultBodyLimit, Path, Query, Request, State},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use chrono::{DateTime, Duration, Utc};
 use rand_core::OsRng;
@@ -25,6 +26,8 @@ use uuid::Uuid;
 
 const DUMMY_PASSWORD_HASH: &str =
     "$argon2id$v=19$m=19456,t=2,p=1$YmFkIHNhbHQh$DqHGwv6NQV0VcaJi7jeF1E8IpfMXmXcpq4r2kKyqpXk";
+
+const MAX_CAPE_BYTES: usize = 256 * 1024;
 
 #[derive(Clone)]
 struct AppState {
@@ -149,6 +152,13 @@ struct StatusResponse {
     status: &'static str,
 }
 
+#[derive(Serialize)]
+struct CapeInfo {
+    published: bool,
+    updated_at: Option<DateTime<Utc>>,
+    texture_url: Option<String>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
@@ -202,6 +212,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             post(reject_friend_request),
         )
         .route("/v1/friends/{friend_id}", delete(remove_friend))
+        .route(
+            "/v1/capes/me",
+            get(get_my_cape).put(upload_cape).delete(delete_my_cape),
+        )
+        .layer(DefaultBodyLimit::max(MAX_CAPE_BYTES))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
     let allowed_origins =
@@ -216,7 +231,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
-        .allow_methods([Method::GET, Method::POST, Method::DELETE])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]);
 
     let app = Router::new()
@@ -224,6 +239,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/auth/register", post(register))
         .route("/v1/auth/login", post(login))
         .route("/v1/auth/minecraft", post(minecraft_login))
+        .route("/v1/capes/player/{minecraft_uuid}", get(get_public_cape))
         .merge(protected_routes)
         .with_state(state)
         .layer(TraceLayer::new_for_http())
@@ -747,6 +763,154 @@ async fn remove_friend(
         return Err(ApiError::not_found("friendship not found"));
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn get_my_cape(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<CapeInfo>> {
+    let (minecraft_uuid, updated_at) = sqlx::query_as::<_, (Option<Uuid>, Option<DateTime<Utc>>)>(
+        "SELECT users.minecraft_uuid, capes.updated_at
+         FROM users
+         LEFT JOIN capes ON capes.user_id = users.id
+         WHERE users.id = $1",
+    )
+    .bind(auth.user_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(ApiError::not_found("user not found"))?;
+
+    let texture_url = match (minecraft_uuid, updated_at) {
+        (Some(uuid), Some(updated)) => Some(format!(
+            "/v1/capes/player/{uuid}?v={}",
+            updated.timestamp_millis()
+        )),
+        _ => None,
+    };
+
+    Ok(Json(CapeInfo {
+        published: updated_at.is_some(),
+        updated_at,
+        texture_url,
+    }))
+}
+
+/// Publishes or replaces the account's single cape. Cape uploads must be valid 64x32 PNGs.
+async fn upload_cape(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> ApiResult<Json<CapeInfo>> {
+    let content_type_is_png = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(';')
+                .next()
+                .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case("image/png"))
+        });
+    if !content_type_is_png {
+        return Err(ApiError::bad_request("cape uploads must use image/png"));
+    }
+
+    validate_cape_png(&body)?;
+
+    let minecraft_uuid = sqlx::query_scalar::<_, Option<Uuid>>(
+        "SELECT minecraft_uuid FROM users WHERE id = $1",
+    )
+    .bind(auth.user_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .flatten()
+    .ok_or(ApiError::conflict(
+        "sign in with a verified Microsoft Minecraft account before publishing a cape",
+    ))?;
+
+    // user_id is the primary key, so another upload replaces this player's current cape.
+    let updated_at = sqlx::query_scalar::<_, DateTime<Utc>>(
+        "INSERT INTO capes (user_id, texture)
+         VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE
+            SET texture = EXCLUDED.texture,
+                updated_at = now()
+         RETURNING updated_at",
+    )
+    .bind(auth.user_id)
+    .bind(body.to_vec())
+    .fetch_one(&state.pool)
+    .await?;
+
+    Ok(Json(CapeInfo {
+        published: true,
+        updated_at: Some(updated_at),
+        texture_url: Some(format!(
+            "/v1/capes/player/{minecraft_uuid}?v={}",
+            updated_at.timestamp_millis()
+        )),
+    }))
+}
+
+async fn delete_my_cape(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<StatusCode> {
+    sqlx::query("DELETE FROM capes WHERE user_id = $1")
+        .bind(auth.user_id)
+        .execute(&state.pool)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Public texture endpoint used by Orange Client players to fetch a published cape by UUID.
+async fn get_public_cape(
+    State(state): State<AppState>,
+    Path(minecraft_uuid): Path<Uuid>,
+) -> ApiResult<Response> {
+    let texture = sqlx::query_scalar::<_, Vec<u8>>(
+        "SELECT capes.texture
+         FROM capes
+         JOIN users ON users.id = capes.user_id
+         WHERE users.minecraft_uuid = $1",
+    )
+    .bind(minecraft_uuid)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(ApiError::not_found("this Minecraft player has no published Orange cape"))?;
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "image/png")
+        .header(header::CACHE_CONTROL, "public, max-age=60")
+        .body(Body::from(texture))
+        .map_err(|_| ApiError::internal())
+}
+
+/// Validate the PNG container and fully decode the small cape texture before storing it.
+fn validate_cape_png(data: &[u8]) -> ApiResult<()> {
+    if data.is_empty() || data.len() > MAX_CAPE_BYTES {
+        return Err(ApiError::bad_request("cape PNG must be smaller than 256 KiB"));
+    }
+
+    let decoder = png::Decoder::new(std::io::Cursor::new(data));
+    let mut reader = decoder
+        .read_info()
+        .map_err(|_| ApiError::bad_request("cape upload is not a valid PNG"))?;
+
+    let info = reader.info();
+    if info.width != 64 || info.height != 32 {
+        return Err(ApiError::bad_request(
+            "cape PNG must be exactly 64x32 pixels",
+        ));
+    }
+
+    let mut decoded = vec![0; reader.output_buffer_size()];
+    reader
+        .next_frame(&mut decoded)
+        .map_err(|_| ApiError::bad_request("cape PNG data is corrupted"))?;
+
+    Ok(())
 }
 
 async fn hash_password(password: String) -> ApiResult<String> {
