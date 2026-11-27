@@ -181,7 +181,7 @@ $orangeMarkBody = $markBodyMatch.Groups["body"].Value
 
 # The pixel-icon wordmark branch also gets the white mark, instead of text alone.
 $oldPixelWordmark = @'
-if colors::active_theme().pixel_icons {
+    if colors::active_theme().pixel_icons {
         return label()
             .text("ONECLIENT")
             .font_family(font())
@@ -192,7 +192,7 @@ if colors::active_theme().pixel_icons {
     }
 '@
 $newPixelWordmark = @'
-if colors::active_theme().pixel_icons {
+    if colors::active_theme().pixel_icons {
         return rect()
             .horizontal()
             .cross_align(Alignment::Center)
