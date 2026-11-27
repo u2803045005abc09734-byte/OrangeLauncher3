@@ -827,7 +827,7 @@ $checks = @(
     @{ Path = "packages/oneclient_app/src/lib.rs"; Text = "mod orange_api;" },
     @{ Path = "packages/oneclient_app/src/view/chat/mod.rs"; Text = "mod orange_social;" },
     @{ Path = "packages/oneclient_app/src/view/chat/panel.rs"; Text = "OrangeSocialPanel.into_element()" },
-    @{ Path = "packages/oneclient_app/src/view/chat/overlay.rs"; Text = "if !open && !notice {" },
+    @{ Path = "packages/oneclient_app/src/view/chat/overlay.rs"; Text = "if !open {" },
     @{ Path = "packages/oneclient_app/src/components/navbar/app_navbar.rs"; Text = "social_icon(false)" },
     @{ Path = "packages/oneclient_app/Cargo.toml"; Text = 'product-name = "Orange Client"' },
     @{ Path = "packages/oneclient_app/assets/themes/minecraft-dark.json"; Text = '"accent": "#FF7A18"' },
