@@ -400,6 +400,260 @@ $discordText = [regex]::Replace($discordText, 'https?://(?:www\.)?polyfrost\.org
 Write-Host "Orange branding: normalized $($discordButtonMatches.Count) Discord Rich Presence button(s)."
 
 
+
+# Remove the original OneClient chat pipeline. Orange Friends and Minecraft's own chat stay independent.
+Replace-SourceText "packages/oneclient_app/src/events.rs" 'ChatEvent, Event, EventReceiver, GameEvent, LaunchStage, ProgressEvent, Signal,' 'Event, EventReceiver, GameEvent, LaunchStage, ProgressEvent, Signal,'
+Replace-SourceText "packages/oneclient_app/src/events.rs" 'use crate::chat::{ChatMessage, ChatToast};' ''
+Replace-SourceText "packages/oneclient_app/src/events.rs" '                        PumpSignal::Chat(job) => {
+                            let station = self.station;
+                            spawn_global(job.run(station));
+                        }' '                        PumpSignal::Chat(_) => {}'
+Replace-SourceText "packages/oneclient_app/src/events.rs" '        let mut chat_events: Vec<ChatEvent> = Vec::new();
+        let mut presence: Vec<(uuid::Uuid, bool)> = Vec::new();
+' ''
+Replace-SourceText "packages/oneclient_app/src/events.rs" '                Event::Chat(ChatEvent::PresenceChanged { player, online }) => {
+                    presence.push((player, online));
+                }
+                Event::Chat(event) => chat_events.push(event),' '                Event::Chat(_) => {},'
+Replace-SourceText "packages/oneclient_app/src/events.rs" @'
+        let mut toasts: Vec<ChatToast> = Vec::new();
+        let mut presence_lost = false;
+        if !chat_events.is_empty() {
+            let mut guard = self.station.write_channel(AppChannel::Chat);
+            for event in chat_events {
+                match event {
+                    ChatEvent::MessageReceived {
+                        account,
+                        group_id,
+                        message_id,
+                        sender,
+                        content,
+                        invite_id,
+                        invite_status,
+                    } => {
+                        if guard.chat.owner != Some(account) {
+                            continue;
+                        }
+
+                        folded.chat_invites |= invite_id.is_some();
+
+                        let visible = crate::view::chat::chat_on_screen(guard.social_open);
+                        let tab = guard.social_tab;
+                        let received = guard.chat.receive(
+                            group_id,
+                            ChatMessage {
+                                id: message_id,
+                                sender,
+                                content,
+                                sent_at: Some(chrono::Utc::now().fixed_offset()),
+                                edited: false,
+                                invite: invite_id
+                                    .map(|id| crate::chat::MessageInvite::new(id, invite_status)),
+                            },
+                            visible,
+                            tab,
+                        );
+
+                        folded.chat_unknown_group |= received.unknown_group;
+                        if received.read && !folded.chat_read.contains(&group_id) {
+                            folded.chat_read.push(group_id);
+                        }
+                        if let Some(toast) = received.toast {
+                            toasts.retain(|known| known.group_id() != Some(group_id));
+                            toasts.push(toast);
+                        }
+                    }
+                    ChatEvent::MessageEdited {
+                        group_id,
+                        message_id,
+                        content,
+                        invite_status,
+                    } => guard
+                        .chat
+                        .edit(group_id, message_id, content, invite_status),
+                    ChatEvent::MessageDeleted {
+                        group_id,
+                        message_id,
+                    } => guard.chat.remove(group_id, message_id),
+                    ChatEvent::GroupRenamed { group_id, name } => guard.chat.rename(group_id, name),
+                    ChatEvent::PresenceChanged { .. } => {}
+                    ChatEvent::RosterChanged => folded.chat_roster = true,
+                    ChatEvent::FriendRequestReceived { account, sender } => {
+                        folded.chat_roster = true;
+                        if guard.chat.owner == Some(account) && !guard.chat.is_friend(sender) {
+                            toasts.push(ChatToast::FriendRequest { sender });
+                        }
+                    }
+                    ChatEvent::ConnectionChanged { connected } => {
+                        guard.chat.connected = connected;
+                        if !connected {
+                            presence.clear();
+                            presence_lost = true;
+                        }
+                        folded.chat_reconnected |= connected;
+                        folded.chat_roster |= connected;
+                    }
+                }
+            }
+        }
+
+        if presence_lost || !presence.is_empty() {
+            let mut guard = self.station.write_channel(AppChannel::ChatPresence);
+            if presence_lost {
+                guard.chat.clear_presence();
+            }
+            for (player, online) in presence {
+                guard.chat.set_presence(player, online);
+            }
+        }
+
+'@ ''
+Replace-SourceText "packages/oneclient_app/src/events.rs" @'
+        if folded.chat_roster {
+            let station = self.station;
+            spawn_global(async move { crate::hooks::load_roster(station).await });
+        }
+        if folded.chat_invites {
+            let station = self.station;
+            spawn_global(async move { crate::hooks::load_invite_games(station).await });
+        }
+        if folded.chat_unknown_group {
+            let station = self.station;
+            spawn_global(async move { crate::hooks::load_conversations(station).await });
+        }
+        if folded.chat_reconnected {
+            let station = self.station;
+            spawn_global(async move { crate::hooks::resync_chat(station).await });
+            spawn_global(async move { crate::hooks::load_self_status(station).await });
+        }
+        for toast in toasts {
+            let actions = self.actions.clone();
+            spawn_global(async move { crate::hooks::notify_chat(actions, toast).await });
+        }
+        for group_id in std::mem::take(&mut folded.chat_read) {
+            let station = self.station;
+            spawn_global(async move { crate::hooks::mark_chat_read(station, group_id).await });
+        }
+
+'@ ''
+
+Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" @'
+        let social_dispatch = dispatch.clone();
+        let toggle_social = move |_| {
+            if crate::view::chat::is_chat_window_open() {
+                crate::view::chat::open_chat_window();
+            } else {
+                social_dispatch.toggle_social();
+            }
+        };
+'@ @'
+        let social_dispatch = dispatch.clone();
+        let toggle_social = move |_| social_dispatch.toggle_social();
+'@
+
+Replace-SourceText "packages/oneclient_app/src/components/toasts.rs" '        use_chat_allowed, use_dispatch, use_link_confirm, use_notifications_snapshot,' '        use_dispatch, use_link_confirm, use_notifications_snapshot,'
+Replace-SourceText "packages/oneclient_app/src/components/toasts.rs" '        let chat_allowed = use_chat_allowed();
+' ''
+Replace-SourceText "packages/oneclient_app/src/components/toasts.rs" '        let right = if social_open && chat_allowed {' '        let right = if social_open {'
+
+Replace-SourceText "packages/oneclient_app/src/hooks/actions.rs" '        crate::view::chat::close_chat_window();
+' ''
+Replace-SourceText "packages/oneclient_app/src/hooks/actions.rs" @'
+    pub fn pop_out_social(&self) {
+        {
+            let mut guard = self.station.clone().write_channel(AppChannel::Social);
+            guard.social_open = false;
+            guard.social_popped_notice = true;
+        }
+        crate::view::chat::open_chat_window();
+    }
+'@ @'
+    pub fn pop_out_social(&self) {
+        // Orange Friends stays inside the launcher; no separate OneClient chat window.
+        let mut guard = self.station.clone().write_channel(AppChannel::Social);
+        guard.social_open = true;
+        guard.social_popped_notice = false;
+    }
+'@
+Replace-SourceText "packages/oneclient_app/src/hooks/actions.rs" '    pub fn dock_social(&self) {
+        crate::view::chat::close_chat_window();
+' '    pub fn dock_social(&self) {'
+
+Replace-SourceText "packages/oneclient_app/src/components/lobby/mod.rs" '    let mut chat_key = use_state(|| None::<(Uuid, Option<i32>)>);
+' ''
+Replace-SourceText "packages/oneclient_app/src/components/lobby/mod.rs" @'
+    use_side_effect({
+        let dispatch = dispatch.clone();
+        move || {
+            let key = state
+                .read()
+                .party
+                .as_ref()
+                .map(|party| (party.id, party.chat_group_id));
+            if *chat_key.peek() != key {
+                chat_key.set(key);
+                dispatch.refresh_chat();
+            }
+        }
+    });
+
+'@ ''
+
+# The old detachable chat window cannot be opened, even by a stale key or UI callback.
+Replace-SourceText "packages/oneclient_app/src/view/chat/window.rs" @'
+pub fn open_chat_window() {
+    let opening = match CHAT_WINDOW.claim() {
+        Claim::Focus(id) => {
+            Platform::get().focus_window(id);
+            return;
+        }
+        Claim::Busy => return,
+        Claim::Launch(guard) => guard,
+    };
+
+    let platform = Platform::get();
+    let launcher = crate::platform::main_window();
+    let anchor = platform.post_callback(move |ctx: &mut RendererContext| {
+        let window = ctx.windows.get(&launcher?)?.window();
+        let monitor = window.current_monitor()?;
+
+        Some(Anchor {
+            position: window.outer_position().ok()?,
+            size: window.outer_size(),
+            scale_factor: window.scale_factor(),
+            monitor_position: monitor.position(),
+            monitor_size: monitor.size(),
+        })
+    });
+
+    spawn_global(async move {
+        let _opening = opening;
+        let beside = anchor.await.ok().flatten().map(beside_launcher);
+        platform.launch_window(window_config(beside)).await;
+    });
+}
+'@ 'pub fn open_chat_window() {}'
+Replace-SourceText "packages/oneclient_app/src/view/chat/window.rs" 'pub fn is_chat_window_open() -> bool {
+    CHAT_WINDOW.is_open()
+}' 'pub fn is_chat_window_open() -> bool {
+    false
+}'
+Replace-SourceText "packages/oneclient_app/src/view/chat/window.rs" 'pub fn is_chat_window_focused() -> bool {
+    CHAT_WINDOW.is_open() && CHAT_FOCUSED.load(Ordering::Relaxed)
+}' 'pub fn is_chat_window_focused() -> bool {
+    false
+}'
+Replace-SourceText "packages/oneclient_app/src/view/chat/window.rs" 'pub fn chat_on_screen(social_open: bool) -> bool {
+    crate::chat::chat_visible(
+        is_chat_window_focused(),
+        social_open,
+        MAIN_FOCUSED.load(Ordering::Relaxed),
+    )
+}' 'pub fn chat_on_screen(_social_open: bool) -> bool {
+    false
+}'
+
+
 # Verify the resulting visible branding before compiling.
 $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_APP_ID: &str = "com.orangeclient.launcher"' },
