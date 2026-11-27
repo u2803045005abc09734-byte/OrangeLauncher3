@@ -682,6 +682,25 @@ $discordVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/o
 if ($discordVerification -match '(?i)https?://(?:www\.)?polyfrost\.org') {
     throw "Orange branding verification failed: a Polyfrost destination remains in Discord Rich Presence."
 }
+$chatEventsVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/events.rs"))
+if ($chatEventsVerification.Contains("ChatEvent::") -or $chatEventsVerification.Contains("hooks::notify_chat")) {
+    throw "Orange Client verification failed: the legacy OneClient chat event pipeline is still active."
+}
+if (-not $chatEventsVerification.Contains("Event::Chat(_) => {}")) {
+    throw "Orange Client verification failed: chat events are not explicitly ignored."
+}
+$chatWindowVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/view/chat/window.rs"))
+if (-not $chatWindowVerification.Contains("pub fn open_chat_window() {}")) {
+    throw "Orange Client verification failed: the legacy detachable chat window can still be opened."
+}
+$navbarVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/components/navbar/app_navbar.rs"))
+if ($navbarVerification.Contains("open_chat_window()") -or $navbarVerification.Contains("is_chat_window_open()")) {
+    throw "Orange Client verification failed: the social navbar still routes into the legacy chat window."
+}
+$lobbyVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/components/lobby/mod.rs"))
+if ($lobbyVerification.Contains("dispatch.refresh_chat()")) {
+    throw "Orange Client verification failed: the legacy chat refresh is still tied to party updates."
+}
 foreach ($check in $checks) {
     $content = [System.IO.File]::ReadAllText((Get-SourceFile $check.Path))
     if (-not $content.Contains($check.Text)) {
