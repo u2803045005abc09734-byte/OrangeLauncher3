@@ -260,6 +260,34 @@ Replace-SourceText "packages/oneclient_common/src/constants.rs" '"OneClient v"' 
 Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" '.size(COMPACT_LOGO_PX)
                 .color(theme::colors::brand())' '.size(COMPACT_LOGO_PX)
                 .color(primary_color(over_art))'
+# Avoid drawing the logo twice when the full wordmark is visible. The wordmark now includes
+# the white Orange mark itself; the standalone compact mark is only shown at narrow widths.
+$oldNavbarLogo = @'
+        .child(
+            Icon::new(IconType::IconLogo)
+                .size(COMPACT_LOGO_PX)
+                .color(primary_color(over_art))
+                .into_element(),
+        )
+        .maybe(show_logo, |rect| {
+            rect.child(NavbarLogo { over_art }.into_element())
+        })
+'@
+$newNavbarLogo = @'
+        .maybe(show_logo, |rect| {
+            rect.child(NavbarLogo { over_art }.into_element())
+        })
+        .maybe(!show_logo, |rect| {
+            rect.child(
+                Icon::new(IconType::IconLogo)
+                    .size(COMPACT_LOGO_PX)
+                    .color(primary_color(over_art))
+                    .into_element(),
+            )
+        })
+'@
+Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" $oldNavbarLogo $newNavbarLogo
+
 
 # Replace product-name mentions in UI string literals, but preserve translation keys and source identifiers.
 $uiSource = Join-Path $source "packages/oneclient_app/src"
@@ -378,6 +406,7 @@ $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_TITLE: &str = "Orange Client"' },
     @{ Path = "packages/oneclient_app/src/theme/mod.rs"; Text = '.text("ORANGECLIENT")' },
     @{ Path = "packages/oneclient_app/src/theme/mod.rs"; Text = '"icons/pixel/icon-logo.svg"' },
+    @{ Path = "packages/oneclient_app/src/components/navbar/app_navbar.rs"; Text = '.maybe(!show_logo, |rect|' },
     @{ Path = "packages/oneclient_discord/src/lib.rs"; Text = '.large_text("Orange Client")' },
     @{ Path = "packages/oneclient_discord/src/lib.rs"; Text = 'Button::new("Orange Client", "https://github.com/u2803045005abc09734-byte/OrangeLauncher3")' },
     @{ Path = "packages/oneclient_common/src/constants.rs"; Text = '"Orange Client v"' },
