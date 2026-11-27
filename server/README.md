@@ -10,10 +10,14 @@ The first Orange-owned API backend for OrangeLauncher3. It is intentionally a se
 - Session expiration and logout/revocation.
 - Username prefix search.
 - Friend requests, incoming request list, accept/reject, friends list and remove.
+- Microsoft Minecraft profile verification; the Minecraft access token is exchanged once and never stored.
+- Free cape publishing for verified Minecraft accounts: one cape per player, with uploads replacing the existing cape.
+- Cape uploads are validated 64x32 PNG files, limited to 256 KiB, and stored in PostgreSQL.
+- Public cape texture delivery by Minecraft UUID.
 - Database migrations run automatically when the API starts.
 - Docker Compose for a local PostgreSQL database and API.
 
-This is a starter service, not a production deployment. It does not yet include email/account recovery, Microsoft account linking, chat messages, presence, parties, skins or cosmetics. Those features need their own API design and client integration.
+Chat messages, presence and parties are not implemented in this backend yet. The cape API is ready for an Orange Client integration, but the in-game mod still needs to call these endpoints to provide the cape editor, equip display and tab-list badge.
 
 ## Run locally with Docker
 
@@ -54,8 +58,14 @@ All endpoints use JSON except where noted.
 | POST | `/v1/friends/requests/{id}/accept` | Accept a request |
 | POST | `/v1/friends/requests/{id}/reject` | Reject a request |
 | DELETE | `/v1/friends/{friend_id}` | Remove a friend |
+| GET | `/v1/capes/me` | Read the signed-in player's cape status |
+| PUT | `/v1/capes/me` | Publish or replace the player's single cape |
+| DELETE | `/v1/capes/me` | Unpublish the player's cape |
+| GET | `/v1/capes/player/{minecraft_uuid}` | Public PNG texture for a Minecraft player |
 
 For protected routes send `Authorization: Bearer ACCESS_TOKEN`. Registration and login accept `{"username":"Example","password":"a-long-password"}`.
+
+Cape publishing requires a session created by `POST /v1/auth/minecraft`, which verifies the current Microsoft/Minecraft account. Send the PNG file itself as the raw request body with `Content-Type: image/png`; accepted images must be exactly **64×32 pixels** and no larger than **256 KiB**. A `PUT` replaces that player's one existing cape instead of creating another. The API returns a versioned `texture_url` from `GET /v1/capes/me`; other players can fetch it by Minecraft UUID. Publishing, replacing and downloading capes are free.
 
 ## Before public deployment
 
