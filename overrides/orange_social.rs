@@ -1,11 +1,20 @@
+use std::path::PathBuf;
+
 use freya::prelude::*;
 
-use crate::components::{Button, ButtonSize, ButtonVariant, TextInput};
+use crate::components::{Button, ButtonSize, ButtonVariant, LocalImage, TextInput};
 use crate::hooks::{try_default_account, use_current_account};
 use crate::orange_api::{
     self, OrangeFriendRequest, OrangeSession, OrangeUser,
 };
 use crate::theme::{colors, rounded, text_size};
+
+#[derive(Clone, PartialEq)]
+struct CapeGalleryEntry {
+    username: String,
+    updated_at: String,
+    preview: PathBuf,
+}
 
 #[derive(PartialEq)]
 pub(super) struct OrangeSocialPanel;
@@ -19,6 +28,10 @@ impl Component for OrangeSocialPanel {
         let mut friends = use_state(Vec::<OrangeUser>::new);
         let mut incoming = use_state(Vec::<OrangeFriendRequest>::new);
         let mut message = use_state(|| None::<String>);
+        let mut cape_gallery = use_state(Vec::<CapeGalleryEntry>::new);
+        let mut selected_cape_file = use_state(|| None::<PathBuf>);
+        let mut cape_message = use_state(|| Some("Static 64×32 PNG · free · one cape per Minecraft account".to_string()));
+        let mut cape_busy = use_state(|| false);
 
         let current_account_query = use_current_account();
         let minecraft_account = try_default_account(&current_account_query);
@@ -28,6 +41,7 @@ impl Component for OrangeSocialPanel {
                 .as_ref()
                 .is_some_and(|account| saved.minecraft_account_id == Some(account.id))
         });
+        let cape_session = signed_in.clone();
         let friend_rows = friends.read().clone();
         let request_rows = incoming.read().clone();
         let result_rows = search_results.read().clone();
@@ -497,6 +511,230 @@ impl Component for OrangeSocialPanel {
                             .font_size(text_size(11.))
                             .color(colors::fg_secondary()),
                     ),
+            );
+        }
+
+        // Orange Client's own cape gallery and publisher; no OneClient marketplace.
+        content = content.child(section_heading("Free Orange Capes"));
+        content = content.child(
+            label()
+                .text("Browse community capes or publish your own static 64×32 PNG. Uploading replaces your current cape.")
+                .font_size(text_size(11.))
+                .color(colors::fg_secondary()),
+        );
+
+        let mut refresh_gallery = cape_gallery;
+        let mut refresh_status = cape_message;
+        let mut refresh_busy = cape_busy;
+        let own_uuid = cape_session.as_ref().and_then(|saved| saved.minecraft_account_id);
+        content = content.child(
+            Button::new()
+                .secondary()
+                .size(ButtonSize::Small)
+                .disabled(*cape_busy.read())
+                .on_press(move |_| {
+                    let mut gallery = refresh_gallery;
+                    let mut status = refresh_status;
+                    let mut busy = refresh_busy;
+                    spawn_global(async move {
+                        busy.set(true);
+                        match orange_api::community_capes().await {
+                            Ok(capes) => {
+                                let cache = std::env::temp_dir().join("OrangeClient").join("community-capes");
+                                let mut entries = Vec::new();
+                                if tokio::fs::create_dir_all(&cache).await.is_ok() {
+                                    for cape in capes.into_iter()
+                                        .filter(|cape| Some(cape.minecraft_uuid) != own_uuid)
+                                        .take(8)
+                                    {
+                                        match orange_api::download_cape_texture(&cape.texture_url).await {
+                                            Ok(bytes) => {
+                                                let path = cache.join(format!("{}.png", cape.minecraft_uuid.simple()));
+                                                if tokio::fs::write(&path, bytes).await.is_ok() {
+                                                    entries.push(CapeGalleryEntry {
+                                                        username: cape.username,
+                                                        updated_at: cape.updated_at,
+                                                        preview: path,
+                                                    });
+                                                }
+                                            }
+                                            Err(error) => {
+                                                status.set(Some(error));
+                                            }
+                                        }
+                                    }
+                                }
+                                gallery.set(entries);
+                                status.set(Some("Community cape list updated.".to_string()));
+                            }
+                            Err(error) => status.set(Some(error)),
+                        }
+                        busy.set(false);
+                    });
+                })
+                .text("Refresh community capes"),
+        );
+
+        let gallery_rows = cape_gallery.read().clone();
+        if gallery_rows.is_empty() {
+            content = content.child(empty_hint("No cape previews loaded yet. Select Refresh community capes."));
+        } else {
+            for cape in gallery_rows {
+                content = content.child(
+                    rect()
+                        .horizontal()
+                        .width(Size::fill())
+                        .padding(Gaps::new_symmetric(8., 7.))
+                        .spacing(10.)
+                        .cross_align(Alignment::Center)
+                        .corner_radius(rounded(8.))
+                        .background(colors::component_bg())
+                        .child(
+                            rect()
+                                .width(Size::px(68.))
+                                .height(Size::px(52.))
+                                .corner_radius(rounded(6.))
+                                .overflow(Overflow::Clip)
+                                .child(LocalImage::new(cape.preview.clone(), 128, false)),
+                        )
+                        .child(
+                            rect()
+                                .vertical()
+                                .width(Size::flex(1.))
+                                .spacing(3.)
+                                .child(
+                                    label()
+                                        .text(format!("Cape by {}", cape.username))
+                                        .font_size(text_size(12.))
+                                        .color(colors::fg_primary()),
+                                )
+                                .child(
+                                    label()
+                                        .text(format!("{} · free · 64×32 PNG", cape.updated_at))
+                                        .font_size(text_size(10.))
+                                        .color(colors::fg_secondary()),
+                                ),
+                        ),
+                );
+            }
+        }
+
+        content = content.child(section_heading("Publish your cape"));
+        let selected_path = selected_cape_file.read().clone();
+        let mut choose_file = selected_cape_file;
+        let mut choose_status = cape_message;
+        content = content.child(
+            Button::new()
+                .secondary()
+                .size(ButtonSize::Small)
+                .on_press(move |_| {
+                    let mut selected = choose_file;
+                    let mut status = choose_status;
+                    spawn_global(async move {
+                        if let Some(handle) = rfd::AsyncFileDialog::new()
+                            .set_title("Choose a static 64×32 cape PNG")
+                            .add_filter("PNG image", &["png"])
+                            .pick_file()
+                            .await
+                        {
+                            let path = handle.path().to_path_buf();
+                            selected.set(Some(path.clone()));
+                            status.set(Some(format!("Selected: {}", path.file_name().and_then(|name| name.to_str()).unwrap_or("cape.png"))));
+                        }
+                    });
+                })
+                .text("Choose cape PNG"),
+        );
+
+        if let Some(path) = selected_path.clone() {
+            content = content.child(
+                rect()
+                    .horizontal()
+                    .width(Size::fill())
+                    .spacing(10.)
+                    .cross_align(Alignment::Center)
+                    .child(
+                        rect()
+                            .width(Size::px(68.))
+                            .height(Size::px(52.))
+                            .corner_radius(rounded(6.))
+                            .overflow(Overflow::Clip)
+                            .child(LocalImage::new(path.clone(), 128, false)),
+                    )
+                    .child(
+                        label()
+                            .text(path.file_name().and_then(|name| name.to_str()).unwrap_or("Selected cape.png"))
+                            .font_size(text_size(11.))
+                            .color(colors::fg_secondary())
+                            .max_lines(1),
+                    ),
+            );
+        }
+
+        if let Some(active) = cape_session {
+            let publish_token = active.access_token.clone();
+            let publish_path = selected_path.clone();
+            let mut publish_status = cape_message;
+            let mut publish_busy = cape_busy;
+            let mut publish_gallery = cape_gallery;
+            content = content.child(
+                Button::new()
+                    .primary()
+                    .size(ButtonSize::Large)
+                    .width(Size::fill())
+                    .disabled(publish_path.is_none() || *cape_busy.read())
+                    .on_press(move |_| {
+                        let Some(path) = publish_path.clone() else { return; };
+                        let token = publish_token.clone();
+                        let mut status = publish_status;
+                        let mut busy = publish_busy;
+                        let mut gallery = publish_gallery;
+                        spawn_global(async move {
+                            busy.set(true);
+                            let result = async {
+                                let bytes = tokio::fs::read(&path).await
+                                    .map_err(|_| "Could not read the selected cape image.".to_string())?;
+                                if bytes.len() > 256 * 1024 {
+                                    return Err("Cape PNG must be 256 KiB or smaller.".to_string());
+                                }
+                                if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+                                    return Err("Please select a valid PNG file.".to_string());
+                                }
+                                let decoded = image::load_from_memory(&bytes)
+                                    .map_err(|_| "The selected file is not a valid PNG image.".to_string())?;
+                                if decoded.width() != 64 || decoded.height() != 32 {
+                                    return Err("Cape images must be exactly 64×32 pixels.".to_string());
+                                }
+                                orange_api::publish_cape(&token, bytes).await?;
+                                Ok::<(), String>(())
+                            }.await;
+                            match result {
+                                Ok(()) => {
+                                    status.set(Some("Cape published. This replaces your previous cape.".to_string()));
+                                    gallery.set(Vec::new());
+                                }
+                                Err(error) => status.set(Some(error)),
+                            }
+                            busy.set(false);
+                        });
+                    })
+                    .text("Publish / replace cape"),
+            );
+        } else {
+            content = content.child(
+                label()
+                    .text("Connect Orange Friends with your Microsoft Minecraft account above to publish. Community capes can still be browsed.")
+                    .font_size(text_size(11.))
+                    .color(colors::fg_secondary()),
+            );
+        }
+
+        if let Some(cape_message) = cape_message.read().clone() {
+            content = content.child(
+                label()
+                    .text(cape_message)
+                    .font_size(text_size(11.))
+                    .color(colors::fg_secondary()),
             );
         }
 
