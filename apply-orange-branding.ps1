@@ -658,6 +658,8 @@ Replace-SourceText "packages/oneclient_app/src/view/chat/window.rs" 'pub fn chat
 # Stop converting shared Poly+ websocket traffic into the old OneClient ChatEvent API.
 # The same socket carries Party packets, which remain supported; chat packets are ignored.
 Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" 'use oneclient_events::EventBus;' 'use oneclient_events::EventBus;'
+Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" 'events: EventBus' '_events: EventBus'
+Replace-SourceText "packages/oneclient_polyplus/src/session.rs" 'use crate::packets::{ClientboundPacket, ServerboundPacket};' 'use crate::packets::ServerboundPacket;'
 Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" '    events: EventBus,
 ' ''
 Replace-SourceText "packages/oneclient_polyplus/src/lib.rs" @'
@@ -722,6 +724,9 @@ $plusSessionVerify = [System.IO.File]::ReadAllText((Get-SourceFile "packages/one
 $plusPolyplusVerify = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_polyplus/src/lib.rs"))
 if ($plusSessionVerify.Contains("ChatEvent::") -or $plusSessionVerify.Contains("events.chat(") -or $plusSessionVerify.Contains("dispatch(events, account_id")) {
     throw "Orange Client verification failed: Poly+ websocket still dispatches OneClient Chat packets."
+}
+if (-not $plusSessionVerify.Contains("party::dispatch(&payload)")) {
+    throw "Orange Client verification failed: the independent Party websocket dispatcher was removed."
 }
 if ($plusPolyplusVerify.Contains("events: EventBus") -or $plusPolyplusVerify.Contains("self.events")) {
     throw "Orange Client verification failed: Poly+ client still holds the old chat event bus."
