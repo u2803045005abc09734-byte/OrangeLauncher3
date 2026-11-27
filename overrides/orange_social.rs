@@ -101,7 +101,7 @@ impl Component for OrangeSocialPanel {
         if party_selected {
             return content
                 .height(Size::fill())
-                .child(PartyTab)
+                .child(PartyTab.into_element())
                 .into_element();
         }
 
