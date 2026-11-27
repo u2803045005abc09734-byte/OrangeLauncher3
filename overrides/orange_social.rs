@@ -647,6 +647,7 @@ impl Component for OrangeSocialPanel {
         );
 
         if let Some(path) = selected_path.clone() {
+            let selected_file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or("Selected cape.png").to_owned();
             content = content.child(
                 rect()
                     .horizontal()
@@ -663,7 +664,7 @@ impl Component for OrangeSocialPanel {
                     )
                     .child(
                         label()
-                            .text(path.file_name().and_then(|name| name.to_str()).unwrap_or("Selected cape.png"))
+                            .text(selected_file_name)
                             .font_size(text_size(11.))
                             .color(colors::fg_secondary())
                             .max_lines(1),
