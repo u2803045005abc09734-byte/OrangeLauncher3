@@ -376,6 +376,20 @@ Replace-SourceText "packages/oneclient_app/src/components/navbar/app_navbar.rs" 
         })
 '@ ''
 
+
+# Remove the legacy Wardrobe route itself, not only its navbar button.
+Replace-SourceText "packages/oneclient_app/src/routes.rs" 'Clusters, Debug, Home, Stats, Wardrobe,' 'Clusters, Debug, Home, Stats,'
+Replace-SourceText "packages/oneclient_app/src/routes.rs" @'
+            #[route("/app/wardrobe")]
+            Wardrobe {},
+'@ ''
+Replace-SourceText "packages/oneclient_app/src/routes.rs" '            Route::Wardrobe { .. } => t("oneclient.routes.wardrobe"),
+' ''
+Replace-SourceText "packages/oneclient_app/src/view/app/mod.rs" 'mod wardrobe;
+' ''
+Replace-SourceText "packages/oneclient_app/src/view/app/mod.rs" 'pub use wardrobe::Wardrobe;
+' ''
+
 # Discord Rich Presence: use the Orange Client asset key. The application name and its
 # uploaded assets come from the Discord application whose ID is set in the
 # ORANGE_CLIENT_DISCORD_CLIENT_ID GitHub secret (create it with the name "Orange Client").
@@ -755,6 +769,15 @@ $checks = @(
 $navbarText = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/components/navbar/app_navbar.rs"))
 if ($navbarText.Contains("Route::Wardrobe")) {
     throw "Orange branding verification failed: the Wardrobe navigation entry is still present."
+}
+
+$routesVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/routes.rs"))
+if ($routesVerification.Contains("/app/wardrobe") -or $routesVerification.Contains("Route::Wardrobe") -or $routesVerification.Contains("Wardrobe,")) {
+    throw "Orange Client verification failed: the old Wardrobe route is still registered."
+}
+$appModulesVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/view/app/mod.rs"))
+if ($appModulesVerification.Contains("mod wardrobe;") -or $appModulesVerification.Contains("pub use wardrobe::Wardrobe;")) {
+    throw "Orange Client verification failed: the old Wardrobe page is still linked into the app."
 }
 $discordVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_discord/src/lib.rs"))
 if ($discordVerification -match '(?i)https?://(?:www\.)?polyfrost\.org') {
