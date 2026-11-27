@@ -746,6 +746,73 @@ if (-not $plusSessionVerify.Contains("party::dispatch(&payload)")) {
     throw "Orange Client verification failed: the independent Party websocket dispatcher was removed."
 }
 
+
+# Keep Orange Friends and the independent Party system, but remove the old OneClient Chat UI modules.
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use crate::components::{OVERLAY_BASE_LEVEL, OverlayPopup, popup_surface, use_popup_intro};' 'use crate::components::{OverlayPopup, popup_surface, use_popup_intro};'
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use crate::hooks::{use_dispatch, use_social_open, use_social_popped_notice};' 'use crate::hooks::{use_dispatch, use_social_open};'
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" '        let open = use_social_open();
+        let dispatch = use_dispatch();
+' '        let open = use_social_open();
+'
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use crate::i18n::t;' ''
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use crate::theme::{self, colors, rounded, text_size};' 'use crate::theme;'
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use super::common::{ROW_RADIUS_PX, inset_border};
+' ''
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" 'use super::window::{MAIN_FOCUSED, track_focus};
+' ''
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" '        let notice = use_social_popped_notice();
+' ''
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" '        track_focus(&dispatch, &MAIN_FOCUSED);
+' ''
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" '        if !open && !notice {' '        if !open {'
+Replace-SourceText "packages/oneclient_app/src/view/chat/overlay.rs" @'
+        if open {
+            DockedPanel.into_element()
+        } else {
+            PoppedNotice.into_element()
+        }
+'@ @'
+        DockedPanel.into_element()
+'@
+
+$overlayPath = Get-SourceFile "packages/oneclient_app/src/view/chat/overlay.rs"
+$overlayText = [System.IO.File]::ReadAllText($overlayPath)
+$poppedNoticePattern = '(?s)\r?\n#\[derive\(PartialEq\)\]\r?\nstruct PoppedNotice;.*?(?=\r?\n#\[cfg\(test\)\])'
+$poppedNoticeMatches = [regex]::Matches($overlayText, $poppedNoticePattern)
+if ($poppedNoticeMatches.Count -gt 0) {
+    $overlayText = [regex]::Replace($overlayText, $poppedNoticePattern, '', 1)
+    [System.IO.File]::WriteAllText($overlayPath, $overlayText, $utf8)
+    Write-Host "Orange Client: removed the old detachable Chat notice UI."
+}
+
+# Replace the old Chat/Thread/List/People/Window module graph with Orange Friends,
+# the Party tab, and inert compatibility entry points for remaining internal callers.
+$chatModulePath = Get-SourceFile "packages/oneclient_app/src/view/chat/mod.rs"
+$chatModuleText = @'
+mod orange_social;
+mod overlay;
+mod panel;
+
+pub use overlay::{DOCKED_INSET_PX, SocialOverlay};
+
+// Compatibility functions for old non-UI callers. The OneClient Chat window
+// and message pipeline are intentionally unavailable in Orange Client.
+pub fn chat_on_screen(_social_open: bool) -> bool {
+    false
+}
+
+pub fn close_chat_window() {}
+
+pub fn is_chat_window_open() -> bool {
+    false
+}
+
+pub fn open_chat_window() {}
+'@
+[System.IO.File]::WriteAllText($chatModulePath, $chatModuleText, $utf8)
+Write-Host "Orange Client: detached the old Chat UI modules; Orange Friends and Party remain."
+
+
 # Verify the resulting visible branding before compiling.
 $checks = @(
     @{ Path = "packages/oneclient_app/src/constants.rs"; Text = 'WINDOW_APP_ID: &str = "com.orangeclient.launcher"' },
@@ -793,6 +860,24 @@ if (-not $chatEventsVerification.Contains("Event::Chat(_) => {}")) {
 $chatWindowVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/view/chat/window.rs"))
 if (-not $chatWindowVerification.Contains("pub fn open_chat_window() {}")) {
     throw "Orange Client verification failed: the legacy detachable chat window can still be opened."
+}
+
+$chatModuleVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/view/chat/mod.rs"))
+foreach ($legacyModule in @("mod common;", "mod list;", "mod people;", "mod thread;", "mod window;")) {
+    if ($chatModuleVerification.Contains($legacyModule)) {
+        throw "Orange Client verification failed: legacy Chat module still linked: $legacyModule"
+    }
+}
+if (-not $chatModuleVerification.Contains("mod orange_social;") -or -not $chatModuleVerification.Contains("mod panel;")) {
+    throw "Orange Client verification failed: Orange Friends panel modules are missing."
+}
+$orangeSocialVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/view/chat/orange_social.rs"))
+if (-not $orangeSocialVerification.Contains("PartyTab") -or -not $orangeSocialVerification.Contains('.text("Party")')) {
+    throw "Orange Client verification failed: the independent Party tab was not preserved."
+}
+$overlayVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/view/chat/overlay.rs"))
+if ($overlayVerification.Contains("PoppedNotice") -or $overlayVerification.Contains("use_social_popped_notice")) {
+    throw "Orange Client verification failed: the old popped-out Chat notice remains."
 }
 $navbarVerification = [System.IO.File]::ReadAllText((Get-SourceFile "packages/oneclient_app/src/components/navbar/app_navbar.rs"))
 if ($navbarVerification.Contains("open_chat_window()") -or $navbarVerification.Contains("is_chat_window_open()")) {

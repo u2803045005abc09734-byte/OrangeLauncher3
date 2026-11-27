@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use freya::prelude::*;
 
-use crate::components::{Button, ButtonSize, ButtonVariant, LocalImage, TextInput};
+use crate::components::{Button, ButtonSize, ButtonVariant, LocalImage, PartyTab, TextInput};
 use crate::hooks::{try_default_account, use_current_account};
 use crate::orange_api::{
     self, OrangeFriendRequest, OrangeSession, OrangeUser,
@@ -32,6 +32,7 @@ impl Component for OrangeSocialPanel {
         let mut selected_cape_file = use_state(|| None::<PathBuf>);
         let mut cape_message = use_state(|| Some("Static 64×32 PNG · free · one cape per Minecraft account".to_string()));
         let mut cape_busy = use_state(|| false);
+        let mut showing_party = use_state(|| false);
 
         let current_account_query = use_current_account();
         let minecraft_account = try_default_account(&current_account_query);
@@ -72,6 +73,37 @@ impl Component for OrangeSocialPanel {
                         .color(colors::fg_secondary()),
                 ),
         );
+
+        let party_selected = *showing_party.read();
+        let mut friends_tab_state = showing_party;
+        let mut party_tab_state = showing_party;
+        content = content.child(
+            rect()
+                .horizontal()
+                .width(Size::fill())
+                .spacing(6.)
+                .child(
+                    Button::new()
+                        .variant(if party_selected { ButtonVariant::Secondary } else { ButtonVariant::Primary })
+                        .size(ButtonSize::Small)
+                        .on_press(move |_| friends_tab_state.set(false))
+                        .text("Friends & Capes"),
+                )
+                .child(
+                    Button::new()
+                        .variant(if party_selected { ButtonVariant::Primary } else { ButtonVariant::Secondary })
+                        .size(ButtonSize::Small)
+                        .on_press(move |_| party_tab_state.set(true))
+                        .text("Party"),
+                ),
+        );
+
+        if party_selected {
+            return content
+                .height(Size::fill())
+                .child(PartyTab.into_element())
+                .into_element();
+        }
 
         if let Some(active) = signed_in {
             let token = active.access_token.clone();
